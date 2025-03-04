@@ -81,6 +81,22 @@ class GetCurrentFilePathTool : AbstractMcpTool<NoArgs>() {
     }
 }
 
+class GetProjectRootPathTool : AbstractMcpTool<NoArgs>() {
+    override val name: String = "get_project_root_path"
+    override val description: String = """
+        Retrieves the absolute path of the currently open project's root directory.
+        Use this tool to get the project root path for tasks requiring project-level information.
+        Returns an empty string if the project root cannot be determined.
+    """.trimIndent()
+
+    override fun handle(project: Project, args: NoArgs): Response {
+        val path = runReadAction<String?> {
+            project.guessProjectDir()?.path
+        }
+        return Response(path ?: "")
+    }
+}
+
 class GetAllOpenFileTextsTool : AbstractMcpTool<NoArgs>() {
     override val name: String = "get_all_open_file_texts"
     override val description: String = """

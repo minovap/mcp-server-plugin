@@ -19,6 +19,7 @@ class McpToolManager {
         private fun getBuiltInTools(): List<AbstractMcpTool<*>> = listOf(
             GetCurrentFileTextTool(),
             GetCurrentFilePathTool(),
+            GetProjectRootPathTool(),
             GetSelectedTextTool(),
             ReplaceSelectedTextTool(),
             ReplaceCurrentFileTextTool(),
