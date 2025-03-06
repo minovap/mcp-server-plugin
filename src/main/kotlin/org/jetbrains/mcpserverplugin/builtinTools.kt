@@ -1,13 +1,20 @@
 package org.jetbrains.mcpserverplugin
-import com.intellij.openapi.diagnostic.logger
-import kotlin.math.absoluteValue
-import java.text.SimpleDateFormat
+
 import com.intellij.execution.ProgramRunnerUtil.executeConfiguration
 import com.intellij.execution.RunManager
+import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.executors.DefaultRunExecutor.getRunExecutorInstance
+import com.intellij.execution.process.OSProcessHandler
+import com.intellij.execution.process.ProcessAdapter
+import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessOutputTypes
 import com.intellij.find.FindManager
 import com.intellij.find.impl.FindInProjectUtil
 import com.intellij.ide.DataManager
+import com.intellij.ide.structureView.TreeBasedStructureViewBuilder
+import com.intellij.ide.structureView.impl.common.PsiTreeElementBase
+import com.intellij.ide.util.treeView.smartTree.TreeElement
+import com.intellij.lang.LanguageStructureViewBuilder
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ex.ActionManagerEx
@@ -15,8 +22,10 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.invokeLater
 import com.intellij.openapi.application.runReadAction
+import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.command.WriteCommandAction.runWriteCommandAction
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -24,12 +33,18 @@ import com.intellij.openapi.fileEditor.FileEditorManager.getInstance
 import com.intellij.openapi.progress.impl.CoreProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.guessProjectDir
+import com.intellij.openapi.project.guessProjectDir
 import com.intellij.openapi.roots.OrderEnumerator
+import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.readText
 import com.intellij.openapi.vfs.toNioPathOrNull
+import com.intellij.openapi.vfs.toNioPathOrNull
 import com.intellij.psi.PsiDocumentManager
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
+import com.intellij.psi.PsiManager
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.usageView.UsageInfo
@@ -38,35 +53,25 @@ import com.intellij.usages.UsageViewPresentation
 import com.intellij.util.Processor
 import com.intellij.util.application
 import com.intellij.util.io.createParentDirectories
+import com.intellij.util.io.createParentDirectories
+import java.io.BufferedReader
+import java.io.File
+import java.io.InputStreamReader
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.text.SimpleDateFormat
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.io.path.*
+import kotlin.io.path.*
+import kotlin.math.absoluteValue
 import kotlinx.serialization.Serializable
+import org.apache.commons.compress.utils.TimeUtils
 import org.jetbrains.ide.mcp.NoArgs
 import org.jetbrains.ide.mcp.Response
-import java.nio.file.Path
-import java.nio.file.Files
-import kotlin.io.path.*
-import java.util.concurrent.atomic.AtomicInteger
-import com.intellij.openapi.application.runReadAction
-import com.intellij.openapi.project.guessProjectDir
-import com.intellij.openapi.vfs.toNioPathOrNull
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import org.jetbrains.mcpserverplugin.settings.PluginSettings
-
-import com.intellij.ide.structureView.TreeBasedStructureViewBuilder
-import com.intellij.ide.structureView.impl.common.PsiTreeElementBase
-import com.intellij.ide.util.treeView.smartTree.TreeElement
-import com.intellij.lang.LanguageStructureViewBuilder
-import com.intellij.psi.PsiFile
-import com.intellij.psi.PsiManager
-import com.intellij.psi.PsiElement
-import java.io.File
-import java.nio.file.Paths
-import com.intellij.execution.configurations.GeneralCommandLine
-import com.intellij.execution.process.OSProcessHandler
-import com.intellij.execution.process.ProcessAdapter
-import com.intellij.execution.process.ProcessEvent
-import com.intellij.execution.process.ProcessOutputTypes
-import com.intellij.openapi.util.Key
 
 // At the top of your file
 private val LOG = com.intellij.openapi.diagnostic.Logger.getInstance(SafeTerminalCommandExecute::class.java)
@@ -1248,6 +1253,9 @@ class ListAvailableActionsTool : AbstractMcpTool<NoArgs>() {
         }
 
         return Response(availableActions.joinToString(",\n", prefix = "[", postfix = "]"))
+    }
+}
+
 @Serializable
 data class DeleteFileArgs(
     val pathInProject: String,
@@ -1358,6 +1366,10 @@ class GetProgressIndicatorsTool : AbstractMcpTool<NoArgs>() {
         }
 
         return Response(progressInfos.joinToString(",\n", prefix = "[", postfix = "]"))
+    }
+}
+
+@Serializable
 data class CopyFileArgs(
     val sourcePath: String,
     val targetPath: String,
@@ -1479,6 +1491,8 @@ class WaitTool : AbstractMcpTool<WaitArgs>() {
         return Response("ok")
     }
 }
+
+@Serializable
 data class GetFileStructureArgs(val pathInProject: String)
 
 /**
