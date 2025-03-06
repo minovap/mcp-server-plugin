@@ -9,6 +9,7 @@ import com.intellij.openapi.util.io.BufferExposingByteArrayOutputStream
 import io.ktor.client.HttpClient
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import org.jetbrains.mcpserverplugin.settings.PluginSettings
 import io.ktor.http.ContentType.*
 import io.ktor.http.contentType
 import io.ktor.util.decodeBase64String
@@ -65,8 +66,9 @@ class MCPService : RestService() {
     override fun execute(urlDecoder: QueryStringDecoder, request: FullHttpRequest, context: ChannelHandlerContext): String? {
         val path = urlDecoder.path().split(serviceName).last().trimStart('/')
         val project = getLastFocusedOrOpenedProject() ?: return null
-        val tools = McpToolManager.Companion.getAllTools()
-
+        
+        // Use only enabled tools
+        val tools = McpToolManager.getEnabledTools() 
         when (path) {
             "list_tools" -> handleListTools(tools, request, context)
             else -> handleToolExecution(path, tools, request, context, project)

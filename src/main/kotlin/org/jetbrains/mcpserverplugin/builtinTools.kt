@@ -29,6 +29,7 @@ import com.intellij.usages.FindUsagesProcessPresentation
 import com.intellij.usages.UsageViewPresentation
 import com.intellij.util.Processor
 import com.intellij.util.application
+import org.jetbrains.mcpserverplugin.settings.PluginSettings
 import com.intellij.util.io.createParentDirectories
 import kotlinx.serialization.Serializable
 import org.jetbrains.ide.mcp.NoArgs
@@ -105,6 +106,9 @@ class SafeTerminalCommandExecute : AbstractMcpTool<SafeTerminalCommandArgs>() {
         val projectDir = runReadAction<String?> {
             project.guessProjectDir()?.toNioPathOrNull()?.toString()
         } ?: return Response(error = "Could not determine project root directory")
+        
+        // Get docker image from settings
+        val dockerImage = com.intellij.openapi.components.service<PluginSettings>().state.dockerImage ?: "gitpod/workspace-full"
 
         // Find docker executable path
         val dockerPath = findDockerExecutable()
@@ -112,13 +116,16 @@ class SafeTerminalCommandExecute : AbstractMcpTool<SafeTerminalCommandArgs>() {
 
         // Build the Docker command with gitpod/workspace-full image
         val dockerCommand = listOf(
-            dockerPath, "run",
+            dockerPath,
+            "run",
             "--platform",
             "linux/amd64",
+            "--user",
+            "root",
             "--rm",
             "-v", "$projectDir:$projectDir",
             "-w", projectDir,
-            "gitpod/workspace-full",
+            dockerImage,
             "bash", "-c", args.command
         )
 
