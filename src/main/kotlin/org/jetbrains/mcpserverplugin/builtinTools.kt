@@ -1,6 +1,7 @@
 package org.jetbrains.mcpserverplugin
 import com.intellij.openapi.diagnostic.logger
-
+import kotlin.math.absoluteValue
+import java.text.SimpleDateFormat
 import com.intellij.execution.ProgramRunnerUtil.executeConfiguration
 import com.intellij.execution.RunManager
 import com.intellij.execution.executors.DefaultRunExecutor.getRunExecutorInstance
@@ -110,26 +111,71 @@ class SafeTerminalCommandExecute : AbstractMcpTool<SafeTerminalCommandArgs>() {
         val dockerPath = findDockerExecutable()
             ?: return Response(error = "Docker executable not found. Make sure Docker is installed and in PATH.")
 
-        // Build the Docker command with gitpod/workspace-full image
-        val dockerCommand = listOf(
+        // Generate a unique container name based on hash of project directory
+        val containerName = "mcp-intellij-container-${projectDir.hashCode().absoluteValue}"
+        val containerPrefix = "mcp-intellij-container-"
+
+        // Clean up old containers (older than 24 hours)
+        try {
+            cleanupOldContainers(dockerPath, containerPrefix)
+        } catch (e: Exception) {
+            // Just log the cleanup error but continue with the main functionality
+            LOG.warn("Failed to clean up old containers: ${e.message}")
+        }
+
+        // Check if container already exists and its status
+        val checkContainerCmd = listOf(
+            dockerPath, "ps", "-a", "--filter", "name=$containerName", "--format", "{{.Status}}"
+        )
+        val containerStatus = Runtime.getRuntime().exec(checkContainerCmd.toTypedArray()).inputStream.bufferedReader().readText().trim()
+        val containerExists = containerStatus.isNotEmpty()
+
+        // Determine the appropriate Docker command
+        val createContainerCmd = listOf(
             dockerPath, "run",
-            "--platform",
-            "linux/amd64",
-            "--rm",
+            "--name", containerName,
+            "--user", "root",
+            "--platform", "linux/amd64",
+            "-d",  // Run in detached mode
             "-v", "$projectDir:$projectDir",
             "-w", projectDir,
             "gitpod/workspace-full",
+            "tail", "-f", "/dev/null"  // Keep container running
+        )
+
+        val execCommand = listOf(
+            dockerPath, "exec",
+            "-w", projectDir,
+            containerName,
             "bash", "-c", args.command
         )
 
-        // Create the full docker command string for output
-        val dockerCommandString = dockerCommand.joinToString(" ") {
-            if (it.contains(" ") || it.contains("\"") || it.contains("'")) "\"$it\"" else it
-        }
+        // Handle container state
+        try {
+            if (!containerExists) {
+                // Create new container if it doesn't exist
+                val process = ProcessBuilder(createContainerCmd)
+                    .redirectErrorStream(true)
+                    .start()
+                process.waitFor()
+                Thread.sleep(1000) // Wait for container to fully start
+            } else if (containerStatus.contains("Exited") || !containerStatus.startsWith("Up")) {
+                // Remove and recreate problematic container
+                Runtime.getRuntime().exec(listOf(dockerPath, "rm", "-f", containerName).toTypedArray()).waitFor()
+                val process = ProcessBuilder(createContainerCmd)
+                    .redirectErrorStream(true)
+                    .start()
+                process.waitFor()
+                Thread.sleep(1000) // Wait for container to fully start
+            }
 
-        return try {
+            // Execute the command in the container
+            val dockerCommandString = execCommand.joinToString(" ") {
+                if (it.contains(" ") || it.contains("\"") || it.contains("'")) "\"$it\"" else it
+            }
+
             // Execute the command
-            val process = ProcessBuilder(dockerCommand)
+            val process = ProcessBuilder(execCommand)
                 .redirectErrorStream(true)
                 .start()
 
@@ -155,9 +201,78 @@ class SafeTerminalCommandExecute : AbstractMcpTool<SafeTerminalCommandArgs>() {
                 }
             }
 
-            Response(formattedOutput)
+            return Response(formattedOutput)
+
         } catch (e: Exception) {
-            Response(error = "Error executing Docker command: ${e.message}")
+            return Response(error = "Error executing Docker command: ${e.message}")
+        }
+    }
+
+    /**
+     * Cleans up containers with the specified prefix that are older than 24 hours
+     */
+    private fun cleanupOldContainers(dockerPath: String, containerPrefix: String) {
+        // Get all containers with our prefix
+        val listCommand = listOf(
+            dockerPath, "container", "ls", "--all",
+            "--filter", "name=$containerPrefix",
+            "--format", "{{.ID}}|{{.CreatedAt}}"
+        )
+
+        val result = Runtime.getRuntime().exec(listCommand.toTypedArray())
+        result.waitFor()
+        val containerInfo = result.inputStream.bufferedReader().readLines().filter { it.isNotEmpty() }
+
+        val twentyFourHoursAgoMillis = System.currentTimeMillis() - (12 * 60 * 60 * 1000)
+        val containerIdsToRemove = mutableListOf<String>()
+
+        // Filter containers by age
+        for (info in containerInfo) {
+            try {
+                val parts = info.split("|")
+                if (parts.size != 2) continue
+
+                val containerId = parts[0]
+                val createdAt = parts[1]
+
+                // Parse Docker timestamp format (2023-04-26 15:44:37 -0700 PDT)
+                val dateStr = createdAt.substringBeforeLast(" ") // Remove timezone name
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z")
+                val containerDate = dateFormat.parse(dateStr)
+
+                if (containerDate.time < twentyFourHoursAgoMillis) {
+                    containerIdsToRemove.add(containerId)
+                }
+            } catch (e: Exception) {
+                LOG.warn("Error parsing container creation time: ${e.message}")
+            }
+        }
+
+        // Remove old containers
+        if (containerIdsToRemove.isNotEmpty()) {
+            LOG.info("Found ${containerIdsToRemove.size} old containers to remove")
+
+            try {
+                val removeCommand = mutableListOf(dockerPath, "container", "rm", "--force")
+                removeCommand.addAll(containerIdsToRemove)
+
+                val process = ProcessBuilder(removeCommand)
+                    .redirectErrorStream(true)
+                    .start()
+
+                val output = process.inputStream.bufferedReader().readText()
+                val exitCode = process.waitFor()
+
+                if (exitCode == 0) {
+                    LOG.info("Successfully removed old containers: $output")
+                } else {
+                    LOG.warn("Issue removing containers. Exit code: $exitCode, Output: $output")
+                }
+            } catch (e: Exception) {
+                LOG.warn("Failed to remove old containers: ${e.message}")
+            }
+        } else {
+            LOG.info("No old containers to remove")
         }
     }
 
