@@ -43,6 +43,7 @@ import com.intellij.openapi.project.guessProjectDir
 import com.intellij.openapi.vfs.toNioPathOrNull
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import org.jetbrains.mcpserverplugin.settings.PluginSettings
 
 import com.intellij.ide.structureView.TreeBasedStructureViewBuilder
 import com.intellij.ide.structureView.impl.common.PsiTreeElementBase
@@ -107,6 +108,9 @@ class SafeTerminalCommandExecute : AbstractMcpTool<SafeTerminalCommandArgs>() {
             project.guessProjectDir()?.toNioPathOrNull()?.toString()
         } ?: return Response(error = "Could not determine project root directory")
 
+        // Get docker image from settings
+        val dockerImage = com.intellij.openapi.components.service<PluginSettings>().state.dockerImage ?: "gitpod/workspace-full"
+
         // Find docker executable path
         val dockerPath = findDockerExecutable()
             ?: return Response(error = "Docker executable not found. Make sure Docker is installed and in PATH.")
@@ -132,14 +136,17 @@ class SafeTerminalCommandExecute : AbstractMcpTool<SafeTerminalCommandArgs>() {
 
         // Determine the appropriate Docker command
         val createContainerCmd = listOf(
-            dockerPath, "run",
+            dockerPath,
+            "run",
+            "--user",
+            "root",
             "--name", containerName,
             "--user", "root",
             "--platform", "linux/amd64",
             "-d",  // Run in detached mode
             "-v", "$projectDir:$projectDir",
             "-w", projectDir,
-            "gitpod/workspace-full",
+            dockerImage,
             "tail", "-f", "/dev/null"  // Keep container running
         )
 
