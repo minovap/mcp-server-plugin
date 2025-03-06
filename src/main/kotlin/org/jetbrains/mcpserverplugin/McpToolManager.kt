@@ -10,7 +10,7 @@ class McpToolManager {
 
         fun getAllTools(): List<AbstractMcpTool<*>> {
             return buildList {
-                // Add all built-in tools
+                // Add built-in tools
                 addAll(getBuiltInTools())
                 // Add extension-provided tools
                 addAll(EP_NAME.extensionList)
@@ -59,9 +59,19 @@ class McpToolManager {
         }
 
         private fun getBuiltInTools(): List<AbstractMcpTool<*>> = listOf(
+            // Custom tools
+            GetProjectRootPathTool(),
+            DeleteFileTool(),
+            CopyFileTool(),
+            MoveFileTool(),
+            GetFileStructureTool(),
+            ReplaceFilePartTextTool(),
+            GetFilePartTextTool(),
+            SafeTerminalCommandExecute(),
+
+            // Official tools
             GetCurrentFileTextTool(),
             GetCurrentFilePathTool(),
-            GetProjectRootPathTool(),
             GetSelectedTextTool(),
             ReplaceSelectedTextTool(),
             ReplaceCurrentFileTextTool(),
@@ -81,13 +91,6 @@ class McpToolManager {
             GetAllOpenFileTextsTool(),
             GetAllOpenFilePathsTool(),
             OpenFileInEditorTool(),
-            DeleteFileTool(),
-            CopyFileTool(),
-            MoveFileTool(),
-            GetFileStructureTool(),
-            ReplaceFilePartTextTool(),
-            GetFilePartTextTool(),
-            SafeTerminalCommandExecute(),
         )
     }
 }
