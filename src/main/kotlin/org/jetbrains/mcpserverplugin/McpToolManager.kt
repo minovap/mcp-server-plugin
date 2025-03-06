@@ -39,6 +39,13 @@ class McpToolManager {
             GetAllOpenFileTextsTool(),
             GetAllOpenFilePathsTool(),
             OpenFileInEditorTool(),
+            DeleteFileTool(),
+            CopyFileTool(),
+            MoveFileTool(),
+            GetFileStructureTool(),
+            ReplaceFilePartTextTool(),
+            GetFilePartTextTool(),
+            SafeTerminalCommandExecute(),
         )
     }
 }
