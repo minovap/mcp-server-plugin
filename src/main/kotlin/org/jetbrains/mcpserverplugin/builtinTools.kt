@@ -1,4 +1,5 @@
 package org.jetbrains.mcpserverplugin
+import com.intellij.openapi.diagnostic.logger
 
 import com.intellij.execution.ProgramRunnerUtil.executeConfiguration
 import com.intellij.execution.RunManager
@@ -51,6 +52,15 @@ import com.intellij.psi.PsiManager
 import com.intellij.psi.PsiElement
 import java.io.File
 import java.nio.file.Paths
+import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.process.OSProcessHandler
+import com.intellij.execution.process.ProcessAdapter
+import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessOutputTypes
+import com.intellij.openapi.util.Key
+
+// At the top of your file
+private val LOG = com.intellij.openapi.diagnostic.Logger.getInstance(SafeTerminalCommandExecute::class.java)
 
 fun Path.resolveRel(pathInProject: String): Path {
     return when (pathInProject) {
@@ -195,15 +205,39 @@ class SafeTerminalCommandExecute : AbstractMcpTool<SafeTerminalCommandArgs>() {
                 listOf("which", "docker")
             }
 
-            val process = ProcessBuilder(command)
-                .redirectErrorStream(true)
-                .start()
+            // Create a command line with console environment
+            val commandLine = GeneralCommandLine(command)
+                .withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
 
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val output = reader.readLine()
+            // Create a process handler
+            val processHandler = OSProcessHandler(commandLine)
+            val output = StringBuilder()
 
-            if (output != null && File(output.trim()).exists()) {
-                return output.trim()
+            // Add a process listener to capture output
+            processHandler.addProcessListener(object : ProcessAdapter() {
+                override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+                    if (outputType === ProcessOutputTypes.STDOUT) {
+                        output.append(event.text)
+                    }
+                }
+            })
+
+            // Start and wait for process
+            processHandler.startNotify()
+            if (processHandler.waitFor(5000)) {
+                val exitCode = processHandler.exitCode ?: -1
+                val outputString = output.toString().trim()
+
+                if (exitCode == 0 && outputString.isNotEmpty()) {
+                    return outputString
+                } else {
+                    LOG.warn("Docker not found. Output: ${outputString.ifEmpty { "null" }}, Exit code: $exitCode")
+                    return null
+                }
+            } else {
+                LOG.warn("Process timed out while searching for Docker")
+                processHandler.destroyProcess()
+                return null
             }
         } catch (e: Exception) {
             // Ignore exceptions from which/where commands
