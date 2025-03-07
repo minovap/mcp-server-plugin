@@ -1,5 +1,4 @@
 package org.jetbrains.mcpserverplugin.actions
-
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
@@ -9,13 +8,12 @@ import org.jetbrains.mcpserverplugin.actions.element.CodeElementFinder
 import org.jetbrains.mcpserverplugin.actions.element.ElementInfoBuilder
 import org.jetbrains.mcpserverplugin.actions.todo.LLMTodoContentCreator
 import org.jetbrains.mcpserverplugin.actions.ui.LLMTodoDialog
-
 /**
- * Action that adds selected code to a LLM task and opens a scratch file
- * This action is available in the editor context menu
+ * Action that adds selected code to a LLM task and copies it to clipboard
+ * This action is available in the editor context menu and copies the todo content
+ * directly to the clipboard without creating a scratch file
  */
 class AddToLLMTodoAction : AnAction() {
-
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
@@ -47,11 +45,15 @@ class AddToLLMTodoAction : AnAction() {
             // Copy to clipboard
             LLMTodoContentCreator.copyToClipboard(todoContent)
             
-            // Open a scratch file with the content
-            LLMTodoContentCreator.createScratchFile(project, todoContent)
+            // Show a notification that content has been copied to clipboard
+            Messages.showInfoMessage(
+                project,
+                "LLM task content has been copied to clipboard.",
+                "LLM Task Created"
+            )
         }
     }
-
+    
     override fun update(e: AnActionEvent) {
         // Only enable the action if we're in an editor with a file
         val project = e.project
