@@ -9,7 +9,7 @@ import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.JBUI
 import org.jetbrains.mcpserverplugin.McpToolManager
-import org.jetbrains.mcpserverplugin.actions.AddToLLMTodoAction
+import org.jetbrains.mcpserverplugin.actions.todo.LLMTodoContentCreator
 import javax.swing.*
 import java.awt.BorderLayout
 import java.awt.Dimension
@@ -58,7 +58,7 @@ class MCPConfigurable : Configurable {
         // Create Reset button for LLM template
         val resetTemplateButton = JButton("Reset to Default")
         resetTemplateButton.addActionListener {
-            llmPromptTemplateArea?.text = AddToLLMTodoAction.DEFAULT_TEMPLATE
+            llmPromptTemplateArea?.text = LLMTodoContentCreator.DEFAULT_TEMPLATE
         }
 
         // Create a Docker image panel with a titled border
@@ -271,7 +271,7 @@ class MCPConfigurable : Configurable {
         showClaudeCheckbox?.isSelected = settings.shouldShowClaudeNotification
         showClaudeSettingsCheckbox?.isSelected = settings.shouldShowClaudeSettingsNotification
         dockerImageField?.text = settings.dockerImage
-        llmPromptTemplateArea?.text = settings.llmPromptTemplate ?: AddToLLMTodoAction.DEFAULT_TEMPLATE
+        llmPromptTemplateArea?.text = settings.llmPromptTemplate ?: LLMTodoContentCreator.DEFAULT_TEMPLATE
 
         // Reset tool enablement settings
         for ((toolName, checkbox) in toolCheckboxes) {
