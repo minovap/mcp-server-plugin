@@ -1,0 +1,11 @@
+{
+    // Specifies the Docker image to use
+    // "image": "gitpod/workspace-full",
+
+    "build": {
+        "dockerfile": "./Dockerfile"
+    },
+
+    // For full devcontainer.json options, see:
+    // https://containers.dev/implementors/json_reference/
+}
