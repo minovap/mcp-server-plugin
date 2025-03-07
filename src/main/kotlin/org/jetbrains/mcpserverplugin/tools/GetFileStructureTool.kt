@@ -7,7 +7,7 @@ import com.intellij.lang.LanguageStructureViewBuilder
 import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.guessProjectDir
-import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.toNioPathOrNull
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
@@ -16,7 +16,7 @@ import com.intellij.psi.PsiManager
 import kotlinx.serialization.Serializable
 import org.jetbrains.ide.mcp.Response
 import org.jetbrains.mcpserverplugin.AbstractMcpTool
-import org.jetbrains.mcpserverplugin.utils.resolveRel
+import org.jetbrains.mcpserverplugin.utils.FileFinderUtils
 import java.nio.file.Path
 
 @Serializable
@@ -37,24 +37,34 @@ class GetFileStructureTool : AbstractMcpTool<GetFileStructureArgs>() {
     """.trimIndent()
 
     override fun handle(project: Project, args: GetFileStructureArgs): Response {
-        val projectDir = project.guessProjectDir()?.toNioPathOrNull()
-            ?: return Response(error = "project dir not found")
+        // Use the new generic file finder to locate the file
+        val findResult = FileFinderUtils.findFileInProject(project, args.pathInProject)
+        
+        return when (findResult) {
+            is FileFinderUtils.FindFileResult.Found -> {
+                try {
+                    val virtualFile = findResult.virtualFile
+                    val resolvedPath = findResult.resolvedPath
+                    
+                    // Add a note if we found the file by fallback search
+                    val fallbackNote = if (!findResult.wasExactMatch) {
+                        val projectPath = project.guessProjectDir()?.toNioPathOrNull()
+                        val relativePath = projectPath?.relativize(resolvedPath)?.toString() ?: resolvedPath.toString()
+                        "\n  \"note\": \"File found at alternate location: $relativePath\","
+                    } else ""
+                    
+                    val psiFile = PsiManager.getInstance(project).findFile(virtualFile)
+                        ?: return Response(error = "couldn't parse file")
 
-        return runReadAction {
-            try {
-                val path = projectDir.resolveRel(args.pathInProject)
-                val virtualFile = LocalFileSystem.getInstance()
-                    .refreshAndFindFileByNioFile(path)
-                    ?: return@runReadAction Response(error = "file not found")
-
-                val psiFile = PsiManager.getInstance(project).findFile(virtualFile)
-                    ?: return@runReadAction Response(error = "couldn't parse file")
-
-                // Use the Structure View API to get the file structure
-                val structure = extractStructureFromFile(psiFile)
-                Response(structure)
-            } catch (e: Exception) {
-                Response(error = "Error analyzing file structure: ${e.message}")
+                    // Use the Structure View API to get the file structure
+                    val structureResult = extractStructureFromFile(psiFile, fallbackNote)
+                    Response(structureResult)
+                } catch (e: Exception) {
+                    Response(error = "Error analyzing file structure: ${e.message}")
+                }
+            }
+            is FileFinderUtils.FindFileResult.NotFound -> {
+                Response(error = findResult.error)
             }
         }
     }
@@ -62,12 +72,12 @@ class GetFileStructureTool : AbstractMcpTool<GetFileStructureArgs>() {
     /**
      * Extracts the structure from a file using IntelliJ's Structure View API
      */
-    private fun extractStructureFromFile(psiFile: PsiFile): String {
+    private fun extractStructureFromFile(psiFile: PsiFile, fallbackNote: String = ""): String {
         val builder = LanguageStructureViewBuilder.INSTANCE.getStructureViewBuilder(psiFile)
-            ?: return createBasicFileInfo(psiFile)
+            ?: return createBasicFileInfo(psiFile, fallbackNote)
 
         if (builder !is TreeBasedStructureViewBuilder) {
-            return createBasicFileInfo(psiFile)
+            return createBasicFileInfo(psiFile, fallbackNote)
         }
 
         val structureViewModel = builder.createStructureViewModel(null)
@@ -78,6 +88,11 @@ class GetFileStructureTool : AbstractMcpTool<GetFileStructureArgs>() {
         result.append("  \"fileName\": \"${psiFile.name}\",\n")
         result.append("  \"fileType\": \"${psiFile.fileType.name}\",\n")
         result.append("  \"language\": \"${psiFile.language.displayName}\",\n")
+        
+        // Add fallback note if provided
+        if (fallbackNote.isNotEmpty()) {
+            result.append(fallbackNote)
+        }
 
         // Process the structure tree
         result.append("  \"elements\": ")
@@ -201,13 +216,17 @@ class GetFileStructureTool : AbstractMcpTool<GetFileStructureArgs>() {
     /**
      * Creates basic file information when structure view is not available
      */
-    private fun createBasicFileInfo(psiFile: PsiFile): String {
+    private fun createBasicFileInfo(psiFile: PsiFile, fallbackNote: String = ""): String {
+        val noteSection = if (fallbackNote.isNotEmpty()) {
+            fallbackNote.trimEnd(',') + ",\n  "
+        } else ""
+        
         return """
         {
           "fileName": "${psiFile.name}",
           "fileType": "${psiFile.fileType.name}",
           "language": "${psiFile.language.displayName}",
-          "elements": [],
+          ${noteSection}"elements": [],
           "note": "No structured view available for this file type"
         }
         """.trimIndent()
