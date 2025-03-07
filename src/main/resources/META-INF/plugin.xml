@@ -65,5 +65,16 @@
             <!-- Add to code popup menu (ALT+ENTER or intention bulb) -->
             <add-to-group group-id="GenerateGroup" anchor="last"/>
         </action>
+        
+        <!-- Add File to LLM action for project view -->
+        <action id="org.jetbrains.mcpserverplugin.actions.AddFileToLLM"
+                class="org.jetbrains.mcpserverplugin.actions.AddFileToLLMAction"
+                text="Use with LLM..."
+                description="Use selected file/folder with Large Language Models">
+            <!-- Project view popup menu (right-click in project sidebar) -->
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last" />
+            <!-- Add ellipsis to indicate this opens a dialog -->
+            <keyboard-shortcut first-keystroke="alt shift L" keymap="$default" />
+        </action>
     </actions>
 </idea-plugin>
