@@ -41,7 +41,8 @@ class AddFileToLLMAction : AnAction(), DumbAware {
             val todoContent = LLMTodoContentCreator.createTodoContent(
                 elementInfo = buildElementInfo(fileContents),
                 surroundingCode = buildSurroundingCode(fileContents),
-                userInput = userInput
+                userInput = userInput,
+                project = project
             )
             
             // Copy to clipboard

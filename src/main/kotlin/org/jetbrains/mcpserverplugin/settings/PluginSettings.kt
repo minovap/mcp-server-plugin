@@ -4,6 +4,7 @@ import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.project.Project
 import com.intellij.util.xmlb.XmlSerializerUtil
 import org.jetbrains.mcpserverplugin.actions.todo.LLMTodoContentCreator
 import org.jetbrains.mcpserverplugin.settings.MCPConfigurable.Companion.DEFAULT_DOCKER_IMAGE
@@ -57,9 +58,7 @@ class PluginSettings : PersistentStateComponent<PluginSettings> {
         return disabledTools.split(",").toSet()
     }
     
-    // Get the prompt template, falling back to default if not set
-    fun getPromptTemplate(): String {
-        return llmPromptTemplate ?: LLMTodoContentCreator.DEFAULT_TEMPLATE
+    companion object {
     }
 
     override fun getState(): PluginSettings {

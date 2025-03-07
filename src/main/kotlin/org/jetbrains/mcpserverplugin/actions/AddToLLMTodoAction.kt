@@ -40,7 +40,7 @@ class AddToLLMTodoAction : AnAction() {
             val surroundingCode = ElementInfoBuilder.getSurroundingCode(selectedElement, file, editor, 50)
             
             // Create the todo content
-            val todoContent = LLMTodoContentCreator.createTodoContent(elementInfo, surroundingCode, userInput)
+            val todoContent = LLMTodoContentCreator.createTodoContent(elementInfo, surroundingCode, userInput, project)
             
             // Copy to clipboard
             LLMTodoContentCreator.copyToClipboard(todoContent)
