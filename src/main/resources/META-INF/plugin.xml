@@ -1,6 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <idea-plugin>
     <id>com.intellij.mcpServer</id>
     <name>MCP Server</name>
+    <version>1.0.16</version>
     <description><![CDATA[
     MCP (Model Context Protocol) Server for IntelliJ IDEs
     <p>
@@ -39,6 +41,8 @@
         <httpRequestHandler implementation="org.jetbrains.ide.mcp.MCPService"/>
         <notificationGroup id="MCPServerPlugin" displayType="BALLOON"/>
         <postStartupActivity implementation="org.jetbrains.mcpserverplugin.MCPServerStartupValidator"/>
+        
+        <!-- Settings service and configurable -->
         <applicationService serviceImplementation="org.jetbrains.mcpserverplugin.settings.PluginSettings"/>
         <applicationConfigurable
             parentId="tools"

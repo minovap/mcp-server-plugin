@@ -1,22 +1,31 @@
 package org.jetbrains.mcpserverplugin.settings
 
-import com.intellij.openapi.components.BaseState
-import com.intellij.openapi.components.SimplePersistentStateComponent
-import com.intellij.openapi.components.Storage
+import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.State
+import com.intellij.openapi.components.Storage
+import com.intellij.openapi.diagnostic.Logger
+import com.intellij.util.xmlb.XmlSerializerUtil
 import org.jetbrains.mcpserverplugin.settings.MCPConfigurable.Companion.DEFAULT_DOCKER_IMAGE
 
-@State(name = "MyPluginSettings", storages = [Storage("mcpServer.xml")])
-class PluginSettings : SimplePersistentStateComponent<MyState>(MyState())
+/**
+ * Persistent settings for the MCP Server plugin.
+ * Uses PersistentStateComponent directly to ensure state is properly saved.
+ */
+@State(
+    name = "org.jetbrains.mcpserverplugin.settings.MCPSettings",
+    storages = [Storage("mcpServerSettings.xml")]
+)
+class PluginSettings : PersistentStateComponent<PluginSettings> {
+    private val LOG = Logger.getInstance(PluginSettings::class.java)
 
-class MyState : BaseState() {
-    var shouldShowNodeNotification: Boolean by property(true)
-    var shouldShowClaudeNotification: Boolean by property(true)
-    var shouldShowClaudeSettingsNotification: Boolean by property(true)
-    var dockerImage by string(DEFAULT_DOCKER_IMAGE)
+    // Basic settings
+    var shouldShowNodeNotification: Boolean = true
+    var shouldShowClaudeNotification: Boolean = true
+    var shouldShowClaudeSettingsNotification: Boolean = true
+    var dockerImage: String = DEFAULT_DOCKER_IMAGE
     
     // Tool enablement settings - using a map serialized as a string
-    private var toolEnablementString by string("")
+    var disabledTools: String = ""
     
     // Helper methods for tool enablement
     fun isToolEnabled(toolName: String): Boolean {
@@ -24,22 +33,41 @@ class MyState : BaseState() {
     }
     
     fun setToolEnabled(toolName: String, enabled: Boolean) {
-        val disabledTools = getDisabledToolsSet().toMutableSet()
+        val tools = getDisabledToolsSet().toMutableSet()
         
         if (enabled) {
-            disabledTools.remove(toolName)
+            tools.remove(toolName)
         } else {
-            disabledTools.add(toolName)
+            tools.add(toolName)
         }
         
         // Update the disabled tools string
-        toolEnablementString = disabledTools.joinToString(",")
+        disabledTools = tools.joinToString(",")
+        LOG.info("Updated disabled tools: $disabledTools")
     }
     
     private fun getDisabledToolsSet(): Set<String> {
-        if (toolEnablementString.isNullOrEmpty()) {
+        if (disabledTools.isEmpty()) {
             return emptySet()
         }
-        return toolEnablementString!!.split(",").toSet()
+        return disabledTools.split(",").toSet()
+    }
+
+    override fun getState(): PluginSettings {
+        LOG.info("Getting PluginSettings state")
+        return this
+    }
+
+    override fun loadState(state: PluginSettings) {
+        LOG.info("Loading PluginSettings state: shouldShowNodeNotification=${state.shouldShowNodeNotification}, " +
+                "disabledTools=${state.disabledTools}")
+        XmlSerializerUtil.copyBean(state, this)
+    }
+    
+    fun logState() {
+        LOG.info("Current state: shouldShowNodeNotification=$shouldShowNodeNotification, " +
+                "shouldShowClaudeNotification=$shouldShowClaudeNotification, " +
+                "shouldShowClaudeSettingsNotification=$shouldShowClaudeSettingsNotification, " +
+                "dockerImage=$dockerImage, disabledTools=$disabledTools")
     }
 }

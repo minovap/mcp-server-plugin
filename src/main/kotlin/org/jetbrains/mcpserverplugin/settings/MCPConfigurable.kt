@@ -4,12 +4,9 @@ import com.intellij.icons.AllIcons
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.options.Configurable
-import com.intellij.ui.HyperlinkLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextField
-import com.intellij.util.ui.JBUI
 import javax.swing.*
-import javax.swing.border.TitledBorder
 import java.awt.BorderLayout
 import java.awt.FlowLayout
 import java.awt.GridLayout
@@ -32,7 +29,9 @@ class MCPConfigurable : Configurable {
     override fun getDisplayName() = "MCP Server"
 
     override fun createComponent(): JComponent {
-        // Initialize notification settings (hidden from UI)
+        LOG.info("Creating MCP Server configurable component")
+        
+        // Initialize notification settings
         showNodeCheckbox = JCheckBox("Show Node Notification")
         showClaudeCheckbox = JCheckBox("Show Claude Notification")
         showClaudeSettingsCheckbox = JCheckBox("Show Claude Settings Notification")
@@ -151,9 +150,23 @@ class MCPConfigurable : Configurable {
             toolsContainer.add(scrollPane, BorderLayout.CENTER)
             toolsContainer.border = BorderFactory.createTitledBorder("Active MCP Tools")
 
-            // Create main panel
+            // Create main panel with notification checkboxes
             panel = JPanel(BorderLayout())
-            panel!!.add(dockerPanel, BorderLayout.NORTH)
+            
+            // Add notification settings to the top
+            val notificationPanel = JPanel(GridLayout(3, 1))
+            notificationPanel.add(showNodeCheckbox)
+            notificationPanel.add(showClaudeCheckbox)
+            notificationPanel.add(showClaudeSettingsCheckbox)
+            notificationPanel.border = BorderFactory.createTitledBorder("Notification Settings")
+            
+            // Add all panels to main
+            val mainContent = JPanel()
+            mainContent.layout = BoxLayout(mainContent, BoxLayout.Y_AXIS)
+            mainContent.add(notificationPanel)
+            mainContent.add(dockerPanel)
+            
+            panel!!.add(mainContent, BorderLayout.NORTH)
             panel!!.add(toolsContainer, BorderLayout.CENTER)
             panel!!.border = BorderFactory.createEmptyBorder(10, 10, 10, 10)
 
@@ -168,19 +181,22 @@ class MCPConfigurable : Configurable {
     }
 
     override fun isModified(): Boolean {
-        val settings = service<PluginSettings>().state
+        val settings = service<PluginSettings>()
+        LOG.info("Checking if settings are modified")
 
         // Check if notification settings are modified
         if (showNodeCheckbox?.isSelected != settings.shouldShowNodeNotification ||
             showClaudeCheckbox?.isSelected != settings.shouldShowClaudeNotification ||
             showClaudeSettingsCheckbox?.isSelected != settings.shouldShowClaudeSettingsNotification ||
             dockerImageField?.text != settings.dockerImage) {
+            LOG.info("Basic settings are modified")
             return true
         }
 
         // Check if any tool enablement is modified
         for ((toolName, checkbox) in toolCheckboxes) {
             if (checkbox.isSelected != settings.isToolEnabled(toolName)) {
+                LOG.info("Tool enablement for $toolName is modified")
                 return true
             }
         }
@@ -189,7 +205,8 @@ class MCPConfigurable : Configurable {
     }
 
     override fun apply() {
-        val settings = service<PluginSettings>().state
+        val settings = service<PluginSettings>()
+        LOG.info("Applying settings changes")
 
         // Apply notification settings
         settings.shouldShowNodeNotification = showNodeCheckbox?.isSelected ?: true
@@ -201,16 +218,21 @@ class MCPConfigurable : Configurable {
         for ((toolName, checkbox) in toolCheckboxes) {
             settings.setToolEnabled(toolName, checkbox.isSelected)
         }
+        
+        // Log the current state after applying changes
+        settings.logState()
     }
 
     override fun reset() {
-        val settings = service<PluginSettings>().state
+        val settings = service<PluginSettings>()
+        settings.logState()
+        LOG.info("Resetting UI to match saved settings")
 
         // Reset notification settings
         showNodeCheckbox?.isSelected = settings.shouldShowNodeNotification
         showClaudeCheckbox?.isSelected = settings.shouldShowClaudeNotification
         showClaudeSettingsCheckbox?.isSelected = settings.shouldShowClaudeSettingsNotification
-        dockerImageField?.text = settings.dockerImage ?: DEFAULT_DOCKER_IMAGE
+        dockerImageField?.text = settings.dockerImage
 
         // Reset tool enablement settings
         for ((toolName, checkbox) in toolCheckboxes) {
