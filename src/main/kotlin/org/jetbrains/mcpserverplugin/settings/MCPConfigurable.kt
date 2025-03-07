@@ -5,14 +5,18 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.options.Configurable
 import com.intellij.ui.components.JBScrollPane
+import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
+import com.intellij.util.ui.JBUI
+import org.jetbrains.mcpserverplugin.McpToolManager
+import org.jetbrains.mcpserverplugin.actions.AddToLLMTodoAction
 import javax.swing.*
 import java.awt.BorderLayout
+import java.awt.Dimension
 import java.awt.FlowLayout
 import java.awt.GridLayout
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
-import org.jetbrains.mcpserverplugin.McpToolManager
 
 class MCPConfigurable : Configurable {
     private val LOG = Logger.getInstance(MCPConfigurable::class.java)
@@ -22,6 +26,7 @@ class MCPConfigurable : Configurable {
     private var showClaudeCheckbox: JCheckBox? = null
     private var showClaudeSettingsCheckbox: JCheckBox? = null
     private var dockerImageField: JBTextField? = null
+    private var llmPromptTemplateArea: JBTextArea? = null
 
     // Store tool checkboxes by name
     private val toolCheckboxes = mutableMapOf<String, JCheckBox>()
@@ -39,10 +44,21 @@ class MCPConfigurable : Configurable {
         // Create Docker image field
         dockerImageField = JBTextField(30)
 
-        // Create Reset button
-        val resetButton = JButton("Reset to Default")
-        resetButton.addActionListener {
+        // Create LLM Prompt template area
+        llmPromptTemplateArea = JBTextArea(10, 50)
+        llmPromptTemplateArea?.lineWrap = true
+        llmPromptTemplateArea?.wrapStyleWord = true
+
+        // Create Reset button for Docker image
+        val resetDockerButton = JButton("Reset to Default")
+        resetDockerButton.addActionListener {
             dockerImageField?.text = DEFAULT_DOCKER_IMAGE
+        }
+
+        // Create Reset button for LLM template
+        val resetTemplateButton = JButton("Reset to Default")
+        resetTemplateButton.addActionListener {
+            llmPromptTemplateArea?.text = AddToLLMTodoAction.DEFAULT_TEMPLATE
         }
 
         // Create a Docker image panel with a titled border
@@ -55,11 +71,30 @@ class MCPConfigurable : Configurable {
                 dockerFieldPanel.add(Box.createHorizontalStrut(5))
                 dockerFieldPanel.add(dockerImageField)
                 dockerFieldPanel.add(Box.createHorizontalStrut(10))
-                dockerFieldPanel.add(resetButton)
+                dockerFieldPanel.add(resetDockerButton)
                 dockerFieldPanel.border = BorderFactory.createEmptyBorder(5, 5, 5, 5)
 
         dockerPanel.add(dockerFieldPanel, BorderLayout.CENTER)
         dockerPanel.border = BorderFactory.createTitledBorder("Docker Image")
+
+        // Create LLM Template panel
+        val llmTemplatePanel = JPanel(BorderLayout())
+        val descriptionLabel = JLabel("<html>Configure the template for LLM prompts. Use the following placeholders:<br>" +
+                "<b>{{TASK}}</b> - The task description entered by the user<br>" +
+                "<b>{{CONTEXT}}</b> - The file path and code element information<br>" +
+                "<b>{{CODE}}</b> - The code surrounding the selected element</html>")
+        descriptionLabel.border = BorderFactory.createEmptyBorder(5, 5, 10, 5)
+        
+        val llmTemplateButtonPanel = JPanel(FlowLayout(FlowLayout.TRAILING))
+        llmTemplateButtonPanel.add(resetTemplateButton)
+        
+        val llmScrollPane = JBScrollPane(llmPromptTemplateArea)
+        llmScrollPane.preferredSize = Dimension(450, 200)
+        
+        llmTemplatePanel.add(descriptionLabel, BorderLayout.NORTH)
+        llmTemplatePanel.add(llmScrollPane, BorderLayout.CENTER)
+        llmTemplatePanel.add(llmTemplateButtonPanel, BorderLayout.SOUTH)
+        llmTemplatePanel.border = BorderFactory.createTitledBorder("LLM Prompt Template")
 
         try {
             // Fetch all tools
@@ -165,6 +200,7 @@ class MCPConfigurable : Configurable {
             mainContent.layout = BoxLayout(mainContent, BoxLayout.Y_AXIS)
             mainContent.add(notificationPanel)
             mainContent.add(dockerPanel)
+            mainContent.add(llmTemplatePanel)
             
             panel!!.add(mainContent, BorderLayout.NORTH)
             panel!!.add(toolsContainer, BorderLayout.CENTER)
@@ -188,7 +224,8 @@ class MCPConfigurable : Configurable {
         if (showNodeCheckbox?.isSelected != settings.shouldShowNodeNotification ||
             showClaudeCheckbox?.isSelected != settings.shouldShowClaudeNotification ||
             showClaudeSettingsCheckbox?.isSelected != settings.shouldShowClaudeSettingsNotification ||
-            dockerImageField?.text != settings.dockerImage) {
+            dockerImageField?.text != settings.dockerImage ||
+            llmPromptTemplateArea?.text != settings.llmPromptTemplate) {
             LOG.info("Basic settings are modified")
             return true
         }
@@ -213,6 +250,7 @@ class MCPConfigurable : Configurable {
         settings.shouldShowClaudeNotification = showClaudeCheckbox?.isSelected ?: true
         settings.shouldShowClaudeSettingsNotification = showClaudeSettingsCheckbox?.isSelected ?: true
         settings.dockerImage = dockerImageField?.text ?: DEFAULT_DOCKER_IMAGE
+        settings.llmPromptTemplate = llmPromptTemplateArea?.text
 
         // Apply tool enablement settings
         for ((toolName, checkbox) in toolCheckboxes) {
@@ -233,6 +271,7 @@ class MCPConfigurable : Configurable {
         showClaudeCheckbox?.isSelected = settings.shouldShowClaudeNotification
         showClaudeSettingsCheckbox?.isSelected = settings.shouldShowClaudeSettingsNotification
         dockerImageField?.text = settings.dockerImage
+        llmPromptTemplateArea?.text = settings.llmPromptTemplate ?: AddToLLMTodoAction.DEFAULT_TEMPLATE
 
         // Reset tool enablement settings
         for ((toolName, checkbox) in toolCheckboxes) {

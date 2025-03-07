@@ -49,5 +49,21 @@
             id="org.jetbrains.mcpserverplugin.settings.MCPConfigurable"
             instance="org.jetbrains.mcpserverplugin.settings.MCPConfigurable"
             displayName="MCP Server"/>
+            
+        <!-- LLM Todo service -->
+        <projectService serviceImplementation="org.jetbrains.mcpserverplugin.llmtodo.LLMTodoService"/>
     </extensions>
+    
+    <actions>
+        <!-- Add to LLM Todo action -->
+        <action id="org.jetbrains.mcpserverplugin.actions.AddToLLMTodo" 
+                class="org.jetbrains.mcpserverplugin.actions.AddToLLMTodoAction"
+                text="Use with LLM"
+                description="Use selected code with Large Language Models">
+            <!-- Add to editor context menu -->
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <!-- Add to code popup menu (ALT+ENTER or intention bulb) -->
+            <add-to-group group-id="GenerateGroup" anchor="last"/>
+        </action>
+    </actions>
 </idea-plugin>

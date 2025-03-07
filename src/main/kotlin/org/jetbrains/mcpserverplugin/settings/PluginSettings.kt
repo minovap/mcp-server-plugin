@@ -5,6 +5,7 @@ import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.util.xmlb.XmlSerializerUtil
+import org.jetbrains.mcpserverplugin.actions.AddToLLMTodoAction
 import org.jetbrains.mcpserverplugin.settings.MCPConfigurable.Companion.DEFAULT_DOCKER_IMAGE
 
 /**
@@ -23,6 +24,9 @@ class PluginSettings : PersistentStateComponent<PluginSettings> {
     var shouldShowClaudeNotification: Boolean = true
     var shouldShowClaudeSettingsNotification: Boolean = true
     var dockerImage: String = DEFAULT_DOCKER_IMAGE
+    
+    // LLM prompt template setting
+    var llmPromptTemplate: String? = null
     
     // Tool enablement settings - using a map serialized as a string
     var disabledTools: String = ""
@@ -51,6 +55,11 @@ class PluginSettings : PersistentStateComponent<PluginSettings> {
             return emptySet()
         }
         return disabledTools.split(",").toSet()
+    }
+    
+    // Get the prompt template, falling back to default if not set
+    fun getPromptTemplate(): String {
+        return llmPromptTemplate ?: AddToLLMTodoAction.DEFAULT_TEMPLATE
     }
 
     override fun getState(): PluginSettings {

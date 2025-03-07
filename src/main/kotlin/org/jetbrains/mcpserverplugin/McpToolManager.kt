@@ -69,6 +69,9 @@ class McpToolManager {
             ReplaceFilePartTextTool(),
             GetFilePartTextTool(),
             SafeTerminalCommandExecute(),
+            
+            // LLM Todo tool
+            ManageLLMTodoTool(),
 
             // Official tools
             GetCurrentFileTextTool(),
