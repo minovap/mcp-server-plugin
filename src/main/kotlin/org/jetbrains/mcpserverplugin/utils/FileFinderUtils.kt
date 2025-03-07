@@ -45,7 +45,8 @@ object FileFinderUtils {
                 LOG.info("File exists at path: $fileExists")
                 
                 val fileSystem = LocalFileSystem.getInstance()
-                fileSystem.refresh(false, true)  // Force refresh the file system
+                // Fix: Use refresh with single argument
+                fileSystem.refresh(false)
                 
                 val exactFile = fileSystem.refreshAndFindFileByNioFile(exactPath)
                 if (exactFile != null) {

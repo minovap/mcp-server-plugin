@@ -66,6 +66,7 @@ class McpToolManager {
             CopyFileTool(),
             MoveFileTool(),
             GetFileStructureTool(),
+            ReplaceFileFunctionTool(), // Add our new tool here
             ReplaceFilePartTextTool(),
             GetFilePartTextTool(),
             SafeTerminalCommandExecute(),
