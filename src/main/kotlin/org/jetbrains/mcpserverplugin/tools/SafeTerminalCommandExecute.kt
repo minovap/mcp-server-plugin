@@ -133,7 +133,7 @@ class SafeTerminalCommandExecute : AbstractMcpTool<SafeTerminalCommandArgs>() {
 
             // Format the output as requested
             val formattedOutput = buildString {
-                append(dockerCommandString)
+                append(simplifyDockerCommand(dockerCommandString))
                 append("\n----\n")
                 append(output)
                 if (exitCode != 0) {
@@ -306,3 +306,75 @@ class SafeTerminalCommandExecute : AbstractMcpTool<SafeTerminalCommandArgs>() {
 data class SafeTerminalCommandArgs(
     val command: String
 )
+
+/**
+ * Simplifies a Docker command by removing common options and paths,
+ * reducing it to a more readable format.
+ *
+ * @param fullCommand The full Docker command to simplify
+ * @return A simplified version of the Docker command
+ */
+private fun simplifyDockerCommand(fullCommand: String): String {
+    // Break the command into tokens by space, preserving quoted sections
+    val tokens = mutableListOf<String>()
+    var currentToken = StringBuilder()
+    var inQuotes = false
+    var quoteChar = ' '
+
+    for (char in fullCommand) {
+        when {
+            (char == '"' || char == '\'') && !inQuotes -> {
+                inQuotes = true
+                quoteChar = char
+                currentToken.append(char)
+            }
+            char == quoteChar && inQuotes -> {
+                inQuotes = false
+                currentToken.append(char)
+            }
+            char == ' ' && !inQuotes -> {
+                if (currentToken.isNotEmpty()) {
+                    tokens.add(currentToken.toString())
+                    currentToken = StringBuilder()
+                }
+            }
+            else -> currentToken.append(char)
+        }
+    }
+
+    if (currentToken.isNotEmpty()) {
+        tokens.add(currentToken.toString())
+    }
+
+    // Find the docker binary path - it should be first token ending with "docker" or "docker.exe"
+    val dockerIndex = tokens.indexOfFirst { it.endsWith("/docker") || it.endsWith("\\docker.exe") || it == "docker" }
+    if (dockerIndex == -1) return fullCommand // can't simplify if docker command not found
+
+    // Find the image name index
+    val imageIndex = tokens.indexOf("gitpod/workspace-full")
+    if (imageIndex == -1) return fullCommand // can't simplify if image not found
+
+    // Find the command after the image (usually bash -c)
+    // Need to search for bash after the image index
+    val commandIndex = tokens.indexOfFirst { it == "bash" && tokens.indexOf(it) > imageIndex }
+    if (commandIndex == -1) return fullCommand // can't simplify if bash command not found
+
+    // Create simplified command: '/docker run image bash -c'
+    val simplified = StringBuilder("/docker")
+
+    // Add 'run' or 'exec' command
+    val runOrExecIndex = tokens.indexOfFirst { it == "run" || it == "exec" }
+    if (runOrExecIndex != -1) {
+        simplified.append(" ").append(tokens[runOrExecIndex])
+    }
+
+    // Add the image name
+    simplified.append(" ").append(tokens[imageIndex])
+
+    // Add the remaining command (bash -c and anything that follows)
+    for (i in commandIndex until tokens.size) {
+        simplified.append(" ").append(tokens[i])
+    }
+
+    return simplified.toString()
+}
