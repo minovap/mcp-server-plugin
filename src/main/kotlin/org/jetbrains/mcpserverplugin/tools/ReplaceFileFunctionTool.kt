@@ -1,5 +1,6 @@
 package org.jetbrains.mcpserverplugin.tools
 
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.ide.structureView.TreeBasedStructureViewBuilder
 import com.intellij.ide.util.treeView.smartTree.TreeElement
 import com.intellij.lang.LanguageStructureViewBuilder
@@ -17,6 +18,7 @@ import org.jetbrains.mcpserverplugin.utils.FileFinderUtils
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicReference
+import com.intellij.psi.PsiNamedElement
 
 @Serializable
 data class ReplaceFileFunctionArgs(
@@ -32,123 +34,112 @@ data class ReplaceFileFunctionArgs(
  */
 class ReplaceFileFunctionTool : AbstractMcpTool<ReplaceFileFunctionArgs>() {
     private val LOG = logger<ReplaceFileFunctionTool>()
-    
+
     override val name: String = "replace_file_function"
     override val description: String = """
         Replaces a function/method in a file with new text.
-        
+
         <pathInProject> Path to the file, relative to project root
         <functionName> Name of the function/method to replace
         <text> New text for the function (should include the complete function definition)
-        
+
         replace_file_function = ({pathInProject: string, functionName: string, text: string}) => string | { error: string };
     """.trimIndent()
 
     override fun handle(project: Project, args: ReplaceFileFunctionArgs): Response {
         // Make sure we have a clean function name
         LOG.info("Received request to replace function: '${args.functionName}' in file: ${args.pathInProject}")
-        
+
         // Find the file in the project
         val findResult = FileFinderUtils.findFileInProject(project, args.pathInProject)
-        
+
         return when (findResult) {
             is FileFinderUtils.FindFileResult.Found -> {
                 try {
                     val virtualFile = findResult.virtualFile
-                    
+
                     // We'll use AtomicReference to get the result from the read action
                     val functionLocationRef = AtomicReference<Pair<Int, Int>?>(null)
                     val errorRef = AtomicReference<String?>(null)
-                    
+
                     // Run PSI operations in a read action on the UI thread to avoid threading issues
                     ApplicationManager.getApplication().invokeAndWait {
                         ReadAction.run<Throwable> {
                             try {
                                 // Get the PSI file
                                 val psiFile = PsiManager.getInstance(project).findFile(virtualFile)
-                                
+
                                 if (psiFile == null) {
                                     errorRef.set("Couldn't parse file")
                                     return@run
                                 }
-                                
+
                                 // Find the function's location using Structure View
                                 val functionLocation = findFunctionLocation(psiFile, args.functionName)
-                                
+
                                 if (functionLocation == null) {
-                                    LOG.error("Function '${args.functionName}' not found in file structure view")
-                                    
-                                    // Fallback: Try to find the function directly in the file content
-                                    val fileContent = String(Files.readAllBytes(virtualFile.toNioPath()))
-                                    val fallbackLocation = findFunctionInTextContent(fileContent, args.functionName)
-                                    
-                                    if (fallbackLocation == null) {
-                                        errorRef.set("Function '${args.functionName}' not found in file")
-                                        return@run
-                                    } else {
-                                        LOG.info("Found function using text search fallback at lines ${fallbackLocation.first}-${fallbackLocation.second}")
-                                        functionLocationRef.set(fallbackLocation)
-                                    }
-                                } else {
-                                    LOG.info("Found function '${args.functionName}' at lines ${functionLocation.first}-${functionLocation.second}")
-                                    functionLocationRef.set(functionLocation)
+                                    errorRef.set("Function '${args.functionName}' not found in IntelliJ's structure data")
+                                    return@run
                                 }
+
+                                LOG.info("Found function '${args.functionName}' at lines ${functionLocation.first}-${functionLocation.second}")
+                                functionLocationRef.set(functionLocation)
                             } catch (e: Exception) {
                                 errorRef.set("Error finding function: ${e.message}")
                                 LOG.error("Error in read action", e)
                             }
                         }
                     }
-                    
+
                     // Check if we had an error
                     errorRef.get()?.let {
                         return Response(error = it)
                     }
-                    
+
                     // Get the function location
                     val functionLocation = functionLocationRef.get() ?: return Response(error = "Failed to find function location")
-                    
+
                     // Read file content
                     val filePath = virtualFile.toNioPath()
                     var success = false
-                    
+
                     // Replace the function text
                     WriteCommandAction.runWriteCommandAction(project) {
                         try {
-                            val originalLines = Files.readAllLines(filePath).toMutableList()
-                            
-                            // Adjust for 0-based index in the list vs 1-based line numbers
-                            val startIndex = functionLocation.first - 1
-                            val endIndex = functionLocation.second - 1
-                            
-                            // Log the original function for debugging
-                            val originalFunction = originalLines.subList(startIndex, endIndex + 1).joinToString("\n")
-                            LOG.info("Original function text:\n$originalFunction")
-                            
-                            // Remove the original function lines
-                            val linesCount = endIndex - startIndex + 1
-                            repeat(linesCount) { originalLines.removeAt(startIndex) }
-                            
-                            // Add the new function text
-                            val newLines = args.text.split("\n")
-                            originalLines.addAll(startIndex, newLines)
-                            
-                            // Write the updated content back to the file
-                            Files.write(filePath, originalLines)
+                            val psiFile = PsiManager.getInstance(project).findFile(virtualFile) ?: return@runWriteCommandAction
+                            val document = psiFile.viewProvider.document ?: return@runWriteCommandAction
+
+                            // Find the function PSI element
+                            val functionElement = psiFile.children
+                                .filterIsInstance<PsiNamedElement>()
+                                .firstOrNull { it.name == args.functionName }
+
+                            if (functionElement == null) {
+                                LOG.error("Function '${args.functionName}' not found in PSI tree during write action.")
+                                return@runWriteCommandAction
+                            }
+
+                            // Get the exact text range of the function
+                            val functionRange = functionElement.textRange
+                            val startOffset = functionRange.startOffset
+                            val endOffset = functionRange.endOffset
+
+                            // Replace the function text using PSI
+                            val newFunctionText = args.text.trim()
+                            document.replaceString(startOffset, endOffset, newFunctionText)
+
+                            // Commit the document changes properly
+                            PsiDocumentManager.getInstance(project).commitDocument(document)
                             virtualFile.refresh(false, false)
-                            
-                            success = true
+
+                            LOG.info("Successfully replaced function '${args.functionName}' using PSI APIs.")
                         } catch (e: Exception) {
-                            LOG.error("Error replacing function", e)
-                            success = false
+                            LOG.error("Error replacing function using PSI APIs", e)
                         }
                     }
-                    
-                    if (success) {
-                        Response("ok")
-                    } else {
-                        Response(error = "Error replacing function")
-                    }
+
+                    // If no critical errors occurred, return success
+                    return Response("ok")
                 } catch (e: Exception) {
                     LOG.error("Error handling function replacement", e)
                     Response(error = "Error handling function replacement: ${e.message}")
@@ -163,13 +154,13 @@ class ReplaceFileFunctionTool : AbstractMcpTool<ReplaceFileFunctionArgs>() {
     /**
      * Finds a function in the text content of a file by searching for its signature.
      * This is a fallback method when structure view fails.
-     * 
+     *
      * @return Pair of (startLine, endLine) or null if function not found
      */
     private fun findFunctionInTextContent(fileContent: String, functionName: String): Pair<Int, Int>? {
         try {
             val lines = fileContent.lines()
-            
+
             // Create various patterns to match function definitions
             val patterns = listOf(
                 Regex("\\s*$functionName\\s*\\(.*\\)\\s*\\{"), // Standard function: functionName() {
@@ -177,7 +168,7 @@ class ReplaceFileFunctionTool : AbstractMcpTool<ReplaceFileFunctionArgs>() {
                 Regex("\\s*$functionName\\s*=\\s*function\\s*\\(.*\\)\\s*\\{"), // Assignment: functionName = function() {
                 Regex("\\s*$functionName\\s*:\\s*\\(.*\\)\\s*=>\\s*\\{") // Arrow function: functionName: () => {
             )
-            
+
             var startLine = -1
             var bracketCount = 0
             var inFunction = false
@@ -193,10 +184,10 @@ class ReplaceFileFunctionTool : AbstractMcpTool<ReplaceFileFunctionArgs>() {
                     }
                     continue
                 }
-                
+
                 // We're inside a function, count brackets to find the end
                 bracketCount += line.count { it == '{' } - line.count { it == '}' }
-                
+
                 // When bracket count reaches 0, we've found the end of the function
                 if (bracketCount <= 0) {
                     val endLine = index + 1
@@ -204,13 +195,13 @@ class ReplaceFileFunctionTool : AbstractMcpTool<ReplaceFileFunctionArgs>() {
                     return Pair(startLine, endLine)
                 }
             }
-            
+
             // If we found the start but not the end, use the last line as end
             if (startLine != -1) {
                 LOG.info("Function appears to end at EOF, using last line")
                 return Pair(startLine, lines.size)
             }
-            
+
             return null
         } catch (e: Exception) {
             LOG.error("Error in text search fallback", e)
@@ -221,46 +212,27 @@ class ReplaceFileFunctionTool : AbstractMcpTool<ReplaceFileFunctionArgs>() {
     /**
      * Finds the start and end line numbers for a function in a file.
      * Uses IntelliJ's Structure View API to locate the function.
-     * 
+     *
      * @return Pair of (startLine, endLine) or null if function not found
      */
     private fun findFunctionLocation(psiFile: PsiFile, functionName: String): Pair<Int, Int>? {
-        // This method must be called inside a read action
-        try {
-            // Get the structure view builder for the file
-            @Suppress("DEPRECATION")
-            val builder = LanguageStructureViewBuilder.INSTANCE.getStructureViewBuilder(psiFile)
-                ?: return null
-    
-            if (builder !is TreeBasedStructureViewBuilder) {
-                return null
-            }
-    
-            // Get the structure view model and root element
-            val structureViewModel = builder.createStructureViewModel(null)
-            val rootElement = structureViewModel.root
-            
-            // Log file type for debugging
-            LOG.info("Finding function '${functionName}' in file of type ${psiFile.fileType.name}, language ${psiFile.language.displayName}")
-            
-            // Create multiple possible representations of the function name based on language patterns
-            val possibleNames = setPossibleFunctionNames(functionName)
-            
-            // Add the exact function name to the set of possible names (in case it contains special syntax)
-            val allPossibleNames = possibleNames.toMutableSet()
-            allPossibleNames.add(functionName)
-            
-            // Search for the function in the structure tree with multiple possible name patterns
-            val result = findFunctionInStructure(rootElement, allPossibleNames)
-            
-            // Clean up the structure view model
-            structureViewModel.dispose()
-            
-            return result
-        } catch (e: Exception) {
-            LOG.error("Error in findFunctionLocation", e)
+        // Use IntelliJ's PSI tree to find a PsiNamedElement with the given function name
+        val functionElements = psiFile.children
+            .filterIsInstance<PsiNamedElement>()
+            .filter { it.name == functionName }
+
+        if (functionElements.isEmpty()) {
+            LOG.warn("Function '$functionName' not found using PSI")
             return null
         }
+
+        val functionElement = functionElements.first()
+        val document = psiFile.viewProvider.document ?: return null
+
+        val startLine = document.getLineNumber(functionElement.textOffset) + 1
+        val endLine = document.getLineNumber(functionElement.textOffset + functionElement.textLength) + 1
+
+        return Pair(startLine, endLine)
     }
     
     /**
