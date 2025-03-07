@@ -3,6 +3,7 @@ package org.jetbrains.mcpserverplugin
 import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.components.service
 import org.jetbrains.mcpserverplugin.git.GetVcsStatusTool
+import org.jetbrains.mcpserverplugin.settings.PluginSettings
 import org.jetbrains.mcpserverplugin.tools.*
 
 class McpToolManager {
@@ -71,9 +72,6 @@ class McpToolManager {
             GetFilePartTextTool(),
             SafeTerminalCommandExecute(),
             
-            // LLM Todo tool
-            ManageLLMTodoTool(),
-
             // Official tools
             GetCurrentFileTextTool(),
             GetCurrentFilePathTool(),
