@@ -79,8 +79,8 @@ class SafeTerminalCommandExecute : AbstractMcpTool<SafeTerminalCommandArgs>() {
             
             // Format the output
             val formattedOutput = buildString {
-                append(simplifyDockerCommand("/docker exec ${dockerManager.containerName} bash -c \"${args.command}\""))
-                append("\n----\n")
+                append("bash# ${args.command}")
+                append("\n")
                 append(output)
             }
             
@@ -95,59 +95,3 @@ class SafeTerminalCommandExecute : AbstractMcpTool<SafeTerminalCommandArgs>() {
 data class SafeTerminalCommandArgs(
     val command: String
 )
-
-/**
- * Simplifies a Docker command by removing common options and paths,
- * reducing it to a more readable format.
- *
- * @param fullCommand The full Docker command to simplify
- * @return A simplified version of the Docker command
- */
-private fun simplifyDockerCommand(fullCommand: String): String {
-    // Break the command into tokens by space, preserving quoted sections
-    val tokens = mutableListOf<String>()
-    var currentToken = StringBuilder()
-    var inQuotes = false
-    var quoteChar = ' '
-
-    for (char in fullCommand) {
-        when {
-            (char == '"' || char == '\'') && !inQuotes -> {
-                inQuotes = true
-                quoteChar = char
-                currentToken.append(char)
-            }
-            char == quoteChar && inQuotes -> {
-                inQuotes = false
-                currentToken.append(char)
-            }
-            char == ' ' && !inQuotes -> {
-                if (currentToken.isNotEmpty()) {
-                    tokens.add(currentToken.toString())
-                    currentToken = StringBuilder()
-                }
-            }
-            else -> currentToken.append(char)
-        }
-    }
-
-    if (currentToken.isNotEmpty()) {
-        tokens.add(currentToken.toString())
-    }
-
-    // Find the docker binary path - it should be first token ending with "docker" or "docker.exe"
-    val dockerIndex = tokens.indexOfFirst { it.endsWith("/docker") || it.endsWith("\\docker.exe") || it == "docker" }
-    if (dockerIndex == -1) return fullCommand // can't simplify if docker command not found
-
-    // Find the container name
-    val containerIndex = tokens.indexOfFirst { it.startsWith("mcp-intellij-container-") }
-    if (containerIndex == -1) return fullCommand // can't simplify if container name not found
-    
-    // Find bash -c
-    val bashIndex = tokens.indexOf("bash")
-    if (bashIndex == -1 || bashIndex >= tokens.size - 2 || tokens[bashIndex + 1] != "-c") 
-        return fullCommand // can't simplify if bash -c not found
-
-    // Create simplified command
-    return "/docker exec ${tokens[containerIndex]} bash -c \"${tokens.subList(bashIndex + 2, tokens.size).joinToString(" ")}\""
-}
