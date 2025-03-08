@@ -138,10 +138,6 @@ class DockerManager(private val projectDir: String) {
         
         // Build Docker image
         val buildCommandBase = mutableListOf(dockerPath, "build")
-
-        // Always add no-cache option to ensure fresh builds when Dockerfile changes
-        // This prevents using cached layers that might not reflect recent Dockerfile changes
-        buildCommandBase.add("--no-cache")
         
         // Create a unique tag that includes a hash of the Dockerfile content to force rebuilds
         // when the Dockerfile changes
