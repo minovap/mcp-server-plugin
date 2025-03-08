@@ -6,7 +6,7 @@ import com.intellij.openapi.components.Storage
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.util.xmlb.XmlSerializerUtil
-import org.jetbrains.mcpserverplugin.actions.todo.LLMTodoContentCreator
+import org.jetbrains.mcpserverplugin.tools.docker.DockerDefaults
 import org.jetbrains.mcpserverplugin.settings.MCPConfigurable.Companion.DEFAULT_DOCKER_IMAGE
 
 /**
@@ -25,6 +25,7 @@ class PluginSettings : PersistentStateComponent<PluginSettings> {
     var shouldShowClaudeNotification: Boolean = true
     var shouldShowClaudeSettingsNotification: Boolean = true
     var dockerImage: String = DEFAULT_DOCKER_IMAGE
+    var useDefaultDockerImage: Boolean = true
     
     // LLM prompt template setting
     var llmPromptTemplate: String? = null
@@ -76,6 +77,8 @@ class PluginSettings : PersistentStateComponent<PluginSettings> {
         LOG.info("Current state: shouldShowNodeNotification=$shouldShowNodeNotification, " +
                 "shouldShowClaudeNotification=$shouldShowClaudeNotification, " +
                 "shouldShowClaudeSettingsNotification=$shouldShowClaudeSettingsNotification, " +
-                "dockerImage=$dockerImage, disabledTools=$disabledTools")
+                "dockerImage=$dockerImage, " +
+                "useDefaultDockerImage=$useDefaultDockerImage, " +
+                "disabledTools=$disabledTools")
     }
 }

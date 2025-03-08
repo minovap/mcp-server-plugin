@@ -1,5 +1,8 @@
 FROM gitpod/workspace-full
 
+# Note: Run apt commands with proper permissions using sudo
+USER root
+
 # Install OpenJDK 17
 RUN apt-get update && \
     apt-get install -y openjdk-17-jdk && \

@@ -10,16 +10,22 @@ import com.intellij.util.ui.JBUI
 import org.jetbrains.mcpserverplugin.McpToolManager
 import javax.swing.*
 import java.awt.BorderLayout
+import java.awt.Component
+import java.awt.Container
+import java.awt.Color
 import java.awt.Dimension
 import java.awt.FlowLayout
 import java.awt.GridLayout
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.awt.event.ItemEvent
+import org.jetbrains.mcpserverplugin.tools.docker.DockerDefaults
 
 class MCPConfigurable : Configurable {
     private val LOG = Logger.getInstance(MCPConfigurable::class.java)
 
     private var panel: JPanel? = null
+    private var useDefaultDockerImageCheckbox: JCheckBox? = null
     private var showNodeCheckbox: JCheckBox? = null
     private var showClaudeCheckbox: JCheckBox? = null
     private var showClaudeSettingsCheckbox: JCheckBox? = null
@@ -46,23 +52,54 @@ class MCPConfigurable : Configurable {
         resetDockerButton.addActionListener {
             dockerImageField?.text = DEFAULT_DOCKER_IMAGE
         }
+        
+        // Create Use Default Docker Image checkbox
+        useDefaultDockerImageCheckbox = JCheckBox("Use default Docker image")
+        useDefaultDockerImageCheckbox?.addItemListener { e ->
+            val useDefault = e.stateChange == ItemEvent.SELECTED
+            dockerImageField?.isEnabled = !useDefault
+            resetDockerButton.isEnabled = !useDefault
+            
+            if (useDefault) {
+                // When checked, display but disable the default image
+                dockerImageField?.text = DockerDefaults.DEFAULT_IMAGE
+            }
+        }
 
         // Create a Docker image panel with a titled border
         val dockerPanel = JPanel(BorderLayout())
+        
+        // Add checkbox at the top
+        val checkboxPanel = JPanel(FlowLayout(FlowLayout.LEFT))
+        checkboxPanel.add(useDefaultDockerImageCheckbox)
+        dockerPanel.add(checkboxPanel, BorderLayout.NORTH)
 
         // Create a horizontal layout for the docker image field and reset button
         val dockerFieldPanel = JPanel()
         dockerFieldPanel.layout = BoxLayout(dockerFieldPanel, BoxLayout.X_AXIS)
-        dockerFieldPanel.add(JLabel("Docker Image:"))
-                dockerFieldPanel.add(Box.createHorizontalStrut(5))
-                dockerFieldPanel.add(dockerImageField)
-                dockerFieldPanel.add(Box.createHorizontalStrut(10))
+        val dockerLabel = JLabel("Docker Image:")
+        dockerFieldPanel.add(dockerLabel)
+        dockerFieldPanel.add(Box.createHorizontalStrut(5))
+        dockerFieldPanel.add(dockerImageField)
+        dockerFieldPanel.add(Box.createHorizontalStrut(10))
                 dockerFieldPanel.add(resetDockerButton)
                 dockerFieldPanel.border = BorderFactory.createEmptyBorder(5, 5, 5, 5)
 
         dockerPanel.add(dockerFieldPanel, BorderLayout.CENTER)
+        
+        // Add a note label about devcontainer.json
+        val notePanel = JPanel(BorderLayout())
+        val devcontainerNote = JLabel(
+            "<html><em>Note: If a project contains a valid <code>.llm/devcontainer.json</code> file, " +
+            "it will take precedence over these settings.</em></html>"
+        )
+        devcontainerNote.font = devcontainerNote.font.deriveFont(devcontainerNote.font.size2D - 1.0f)
+        devcontainerNote.foreground = Color(100, 100, 100)
+        devcontainerNote.border = BorderFactory.createEmptyBorder(0, 4, 8, 0)
+        notePanel.add(devcontainerNote, BorderLayout.WEST)
+        dockerPanel.add(notePanel, BorderLayout.SOUTH)
         dockerPanel.border = BorderFactory.createTitledBorder("Docker Image")
-
+        
         // Add note about LLM prompt template
         val promptNotePanel = JPanel(BorderLayout())
         val noteLabel = JLabel("<html>The LLM prompt template is now configured via the <code>.llm/prompt-context.md</code> file in your project root.<br>" +
@@ -202,7 +239,12 @@ class MCPConfigurable : Configurable {
         if (showNodeCheckbox?.isSelected != settings.shouldShowNodeNotification ||
             showClaudeCheckbox?.isSelected != settings.shouldShowClaudeNotification ||
             showClaudeSettingsCheckbox?.isSelected != settings.shouldShowClaudeSettingsNotification ||
-            dockerImageField?.text != settings.dockerImage) {
+            useDefaultDockerImageCheckbox?.isSelected != settings.useDefaultDockerImage) {
+            LOG.info("Basic settings are modified")
+            return true
+        }
+        
+        if (!settings.useDefaultDockerImage && dockerImageField?.text != settings.dockerImage) {
             LOG.info("Basic settings are modified")
             return true
         }
@@ -226,7 +268,12 @@ class MCPConfigurable : Configurable {
         settings.shouldShowNodeNotification = showNodeCheckbox?.isSelected ?: true
         settings.shouldShowClaudeNotification = showClaudeCheckbox?.isSelected ?: true
         settings.shouldShowClaudeSettingsNotification = showClaudeSettingsCheckbox?.isSelected ?: true
-        settings.dockerImage = dockerImageField?.text ?: DEFAULT_DOCKER_IMAGE
+        settings.useDefaultDockerImage = useDefaultDockerImageCheckbox?.isSelected ?: true
+        
+        // Only save custom docker image if not using default
+        if (!settings.useDefaultDockerImage) {
+            settings.dockerImage = dockerImageField?.text ?: DEFAULT_DOCKER_IMAGE
+        }
 
         // Apply tool enablement settings
         for ((toolName, checkbox) in toolCheckboxes) {
@@ -246,7 +293,14 @@ class MCPConfigurable : Configurable {
         showNodeCheckbox?.isSelected = settings.shouldShowNodeNotification
         showClaudeCheckbox?.isSelected = settings.shouldShowClaudeNotification
         showClaudeSettingsCheckbox?.isSelected = settings.shouldShowClaudeSettingsNotification
+        useDefaultDockerImageCheckbox?.isSelected = settings.useDefaultDockerImage
+        
+        // Set the Docker image field
         dockerImageField?.text = settings.dockerImage
+        
+        // Update field enabled state
+        dockerImageField?.isEnabled = !settings.useDefaultDockerImage
+        panel?.findComponentByName("Reset to Default")?.isEnabled = !settings.useDefaultDockerImage
 
         // Reset tool enablement settings
         for ((toolName, checkbox) in toolCheckboxes) {
@@ -257,4 +311,14 @@ class MCPConfigurable : Configurable {
     companion object {
         const val DEFAULT_DOCKER_IMAGE = "gitpod/workspace-full"
     }
+}
+
+// Helper extension to find a component by name
+private fun Container.findComponentByName(name: String): Component? {
+    var result: Component? = null
+    for (component in this.components) {
+        if (component is JButton && component.text == name) result = component
+        if (component is Container && result == null) result = component.findComponentByName(name)
+    }
+    return result
 }
