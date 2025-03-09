@@ -4,10 +4,8 @@ import com.intellij.ide.structureView.TreeBasedStructureViewBuilder
 import com.intellij.ide.structureView.impl.common.PsiTreeElementBase
 import com.intellij.ide.util.treeView.smartTree.TreeElement
 import com.intellij.lang.LanguageStructureViewBuilder
-import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.guessProjectDir
-import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.toNioPathOrNull
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
@@ -17,14 +15,13 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.ide.mcp.Response
 import org.jetbrains.mcpserverplugin.AbstractMcpTool
 import org.jetbrains.mcpserverplugin.utils.FileFinderUtils
-import java.nio.file.Path
 
 @Serializable
 data class GetFileStructureArgs(val pathInProject: String)
 
 /**
  * A tool that returns the structure of a file using IntelliJ's Structure View API.
- * This approach is language-agnostic and works with any file type that has a structure view provider.
+ * Extracts important structural elements from the file.
  */
 class GetFileStructureTool : AbstractMcpTool<GetFileStructureArgs>() {
     override val name: String = "get_file_structure"
@@ -37,7 +34,7 @@ class GetFileStructureTool : AbstractMcpTool<GetFileStructureArgs>() {
     """.trimIndent()
 
     override fun handle(project: Project, args: GetFileStructureArgs): Response {
-        // Use the new generic file finder to locate the file
+        // Use the generic file finder to locate the file
         val findResult = FileFinderUtils.findFileInProject(project, args.pathInProject)
         
         return when (findResult) {
@@ -50,14 +47,14 @@ class GetFileStructureTool : AbstractMcpTool<GetFileStructureArgs>() {
                     val fallbackNote = if (!findResult.wasExactMatch) {
                         val projectPath = project.guessProjectDir()?.toNioPathOrNull()
                         val relativePath = projectPath?.relativize(resolvedPath)?.toString() ?: resolvedPath.toString()
-                        "\n  \"note\": \"File found at alternate location: $relativePath\","
+                        "\n// Note: File found at alternate location: $relativePath"
                     } else ""
                     
                     val psiFile = PsiManager.getInstance(project).findFile(virtualFile)
                         ?: return Response(error = "couldn't parse file")
 
                     // Use the Structure View API to get the file structure
-                    val structureResult = extractStructureFromFile(psiFile, fallbackNote)
+                    val structureResult = extractStructureFromFile(project, psiFile, fallbackNote)
                     Response(structureResult)
                 } catch (e: Exception) {
                     Response(error = "Error analyzing file structure: ${e.message}")
@@ -71,8 +68,9 @@ class GetFileStructureTool : AbstractMcpTool<GetFileStructureArgs>() {
 
     /**
      * Extracts the structure from a file using IntelliJ's Structure View API
+     * and includes only the essential structural elements
      */
-    private fun extractStructureFromFile(psiFile: PsiFile, fallbackNote: String = ""): String {
+    private fun extractStructureFromFile(project: Project, psiFile: PsiFile, fallbackNote: String = ""): String {
         val builder = LanguageStructureViewBuilder.INSTANCE.getStructureViewBuilder(psiFile)
             ?: return createBasicFileInfo(psiFile, fallbackNote)
 
@@ -80,120 +78,176 @@ class GetFileStructureTool : AbstractMcpTool<GetFileStructureArgs>() {
             return createBasicFileInfo(psiFile, fallbackNote)
         }
 
+        // Get the document for extracting content
+        val document = PsiDocumentManager.getInstance(project).getDocument(psiFile)
+            ?: return createBasicFileInfo(psiFile, fallbackNote)
+
         val structureViewModel = builder.createStructureViewModel(null)
         val rootElement = structureViewModel.root
 
         val result = StringBuilder()
-        result.append("{\n")
-        result.append("  \"fileName\": \"${psiFile.name}\",\n")
-        result.append("  \"fileType\": \"${psiFile.fileType.name}\",\n")
-        result.append("  \"language\": \"${psiFile.language.displayName}\",\n")
         
-        // Add fallback note if provided
+        // Add file name as the root element
+        result.append("// Structure of ${psiFile.name}\n\n")
+
+        // Process the structure tree
+        processStructure(rootElement, result, document)
+
+        // Add any fallback note
         if (fallbackNote.isNotEmpty()) {
             result.append(fallbackNote)
         }
 
-        // Process the structure tree
-        result.append("  \"elements\": ")
-        buildStructureTree(rootElement, result, 0)
-
-        result.append("\n}")
         return result.toString()
     }
 
     /**
-     * Recursively builds a JSON representation of the structure tree
-     * with added line and column number information
+     * Process the structure elements
      */
-    private fun buildStructureTree(element: TreeElement, result: StringBuilder, level: Int): StringBuilder {
-        if (level == 0) {
-            result.append("[\n")
+    private fun processStructure(rootElement: TreeElement, result: StringBuilder, document: com.intellij.openapi.editor.Document) {
+        val children = rootElement.children
+        
+        // Process children at top level
+        children.forEach { child ->
+            processElement(child, result, 0, document)
         }
-
-        val indent = "    ".repeat(level + 1)
-        val children = element.children
-
+    }
+    
+    /**
+     * Process a single element in the structure and extract only its signature
+     */
+    private fun processElement(element: TreeElement, result: StringBuilder, level: Int, document: com.intellij.openapi.editor.Document) {
+        val indent = "  ".repeat(level)
+        
+        // Handle non-PSI elements
         if (element !is PsiTreeElementBase<*>) {
-            // For non-PSI elements, just include presentation text
-            result.append("$indent{\n")
-            result.append("$indent  \"name\": \"${element.presentation.presentableText}\",\n")
-            result.append("$indent  \"type\": \"element\"\n")
-            result.append("$indent}")
-        } else {
-            // For PSI elements, include more information
-            val value = element.value
-            val elementType = getElementType(value)
-
-            result.append("$indent{\n")
-            result.append("$indent  \"name\": \"${element.presentation.presentableText}\",\n")
-            result.append("$indent  \"type\": \"$elementType\"")
-
-            // Add line and column number information if it's a PsiElement
-            if (value is PsiElement) {
-                try {
-                    val containingFile = value.containingFile
-                    val project = containingFile.project
-                    val document = PsiDocumentManager.getInstance(project).getDocument(containingFile)
-                        ?: containingFile.viewProvider.document
-
-                    if (document != null) {
-                        val textRange = value.textRange
-                        if (textRange != null) {
-                            // Start position
-                            val startOffset = textRange.startOffset
-                            val startLineNumber = document.getLineNumber(startOffset) + 1 // +1 because line numbers are 0-based
-
-                            result.append(",\n$indent  \"startLine\": $startLineNumber")
-
-                            // End position
-                            val endOffset = textRange.endOffset
-                            val endLineNumber = document.getLineNumber(endOffset) + 1
-
-                            result.append(",\n$indent  \"endLine\": $endLineNumber")
-                        }
-                    }
-                } catch (e: Exception) {
-                    // If we can't get position info, just continue without it
-                    result.append(",\n$indent  \"positionInfo\": \"unavailable: ${e.message?.escapeJson() ?: "unknown error"}\"")
-                }
-            }
-
-            // Add any location text or tooltips if available
-            element.presentation.locationString?.let {
-                if (it.isNotEmpty()) {
-                    result.append(",\n$indent  \"detail\": \"${it.escapeJson()}\"")
-                }
-            }
-
-            if (children.isNotEmpty()) {
-                result.append(",\n")
-                result.append("$indent  \"children\": [\n")
-
-                children.forEachIndexed { index, child ->
-                    buildStructureTree(child, result, level + 1)
-                    if (index < children.size - 1) {
-                        result.append(",\n")
-                    } else {
-                        result.append("\n")
+            return
+        }
+        
+        val presentableText = element.presentation.presentableText ?: "Unknown"
+        val children = element.children
+        val hasChildren = children.isNotEmpty()
+        val value = element.value
+        val elementType = getElementType(value)
+        
+        // Skip parameters, constructors and other less important elements to avoid clutter
+        if (elementType in setOf("parameter", "constructor")) {
+            return
+        }
+        
+        // Get PSI element for text extraction
+        val psiElement = value as? PsiElement ?: return
+        
+        // Get text range
+        val textRange = psiElement.textRange ?: return
+        
+        // Calculate line numbers for extraction
+        val startLine = document.getLineNumber(textRange.startOffset)
+        
+        // For most element types, we just want to extract the first line (declaration/signature)
+        when (elementType) {
+            "class", "interface", "enum" -> {
+                // Extract just the class declaration line
+                val lineStart = document.getLineStartOffset(startLine)
+                val lineText = document.getText(
+                    com.intellij.openapi.util.TextRange(
+                        lineStart, 
+                        document.getLineEndOffset(startLine)
+                    )
+                ).trim()
+                
+                result.append("$indent$lineText {\n")
+                
+                // Process children
+                if (hasChildren) {
+                    children.forEach { child ->
+                        processElement(child, result, level + 1, document)
                     }
                 }
-
-                result.append("$indent  ]")
+                
+                // Close the block
+                result.append("$indent}\n\n")
             }
-
-            result.append("\n$indent}")
+            "method", "function" -> {
+                // Extract just function declaration
+                extractFunctionSignature(document, startLine, result, indent)
+            }
+            "property", "field", "variable" -> {
+                // Extract just the property declaration
+                val lineStart = document.getLineStartOffset(startLine)
+                val lineText = document.getText(
+                    com.intellij.openapi.util.TextRange(
+                        lineStart, 
+                        document.getLineEndOffset(startLine)
+                    )
+                ).trim()
+                
+                result.append("$indent$lineText\n")
+            }
+            "companion" -> {
+                // For companion objects
+                result.append("${indent}companion object {\n")
+                
+                // Process children
+                if (hasChildren) {
+                    children.forEach { child ->
+                        processElement(child, result, level + 1, document)
+                    }
+                }
+                
+                // Close the block
+                result.append("$indent}\n")
+            }
+            // For other significant elements with children
+            else -> {
+                if (hasChildren && !presentableText.startsWith("@")) {
+                    // Extract name only for container elements
+                    result.append("$indent$presentableText {\n")
+                    
+                    children.forEach { child ->
+                        processElement(child, result, level + 1, document)
+                    }
+                    
+                    result.append("$indent}\n")
+                }
+            }
         }
-
-        if (level == 0) {
-            result.append("\n  ]")
+    }
+    
+    /**
+     * Extract just the function signature without the implementation
+     */
+    private fun extractFunctionSignature(
+        document: com.intellij.openapi.editor.Document,
+        startLine: Int,
+        result: StringBuilder,
+        indent: String
+    ) {
+        // Start with the first line
+        var lineText = document.getText(
+            com.intellij.openapi.util.TextRange(
+                document.getLineStartOffset(startLine),
+                document.getLineEndOffset(startLine)
+            )
+        ).trim()
+        
+        // Check if the signature is complete (has opening brace)
+        if (!lineText.contains("{")) {
+            result.append("$indent$lineText\n")
+            return
         }
-
-        return result
+        
+        // For functions with implementation on same line, strip the implementation
+        val bracketIndex = lineText.indexOf("{")
+        if (bracketIndex > 0) {
+            lineText = lineText.substring(0, bracketIndex).trim()
+        }
+        
+        result.append("$indent$lineText\n")
     }
 
     /**
-     * Attempts to determine a meaningful type for a PSI element
+     * Determines a meaningful type for a PSI element
      */
     private fun getElementType(element: Any?): String {
         return when {
@@ -208,6 +262,7 @@ class GetFileStructureTool : AbstractMcpTool<GetFileStructureArgs>() {
             element.javaClass.simpleName.contains("Interface", ignoreCase = true) -> "interface"
             element.javaClass.simpleName.contains("Enum", ignoreCase = true) -> "enum"
             element.javaClass.simpleName.contains("Parameter", ignoreCase = true) -> "parameter"
+            element.javaClass.simpleName.contains("Constructor", ignoreCase = true) -> "constructor"
             element.javaClass.simpleName.contains("Companion", ignoreCase = true) -> "companion"
             else -> "element"
         }
@@ -217,29 +272,14 @@ class GetFileStructureTool : AbstractMcpTool<GetFileStructureArgs>() {
      * Creates basic file information when structure view is not available
      */
     private fun createBasicFileInfo(psiFile: PsiFile, fallbackNote: String = ""): String {
-        val noteSection = if (fallbackNote.isNotEmpty()) {
-            fallbackNote.trimEnd(',') + ",\n  "
-        } else ""
+        val result = StringBuilder()
+        result.append("// Structure of ${psiFile.name} (${psiFile.fileType.name})\n")
+        result.append("// No detailed structure available for this file type\n")
         
-        return """
-        {
-          "fileName": "${psiFile.name}",
-          "fileType": "${psiFile.fileType.name}",
-          "language": "${psiFile.language.displayName}",
-          ${noteSection}"elements": [],
-          "note": "No structured view available for this file type"
+        if (fallbackNote.isNotEmpty()) {
+            result.append(fallbackNote)
         }
-        """.trimIndent()
-    }
-
-    /**
-     * Helper function to escape JSON strings
-     */
-    private fun String.escapeJson(): String {
-        return this.replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t")
+        
+        return result.toString()
     }
 }
