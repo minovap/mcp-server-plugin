@@ -1,8 +1,10 @@
 # Instructions
 
-When creating new files attempt to split them up in smaller files if possible 
+When creating new files attempt to split them up in smaller files if possible
 
-Try building with "./gradlew build" to check for errors and fix them
+Try building with "./gradlew build" to check for build errors and fix them
+
+If you want to check if your changes are working you need me to install the newly built plugin for you, ask me first and then wait
 
 # Task
 
