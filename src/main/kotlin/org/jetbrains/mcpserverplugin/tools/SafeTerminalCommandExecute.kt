@@ -34,8 +34,14 @@ class SafeTerminalCommandExecute : AbstractMcpTool<SafeTerminalCommandArgs>() {
             project.guessProjectDir()?.toNioPathOrNull()?.toString()
         } ?: return Response(error = "Could not determine project root directory")
 
+        val projectName = project.name.let {
+            // Sanitize the project name for Docker container naming
+            // Replace any non-alphanumeric characters with hyphens and convert to lowercase
+            it.replace(Regex("[^a-zA-Z0-9]"), "-").lowercase()
+        }
+
         // Initialize Docker manager
-        val dockerManager = DockerManager(projectDir)
+        val dockerManager = DockerManager(projectDir, projectName)
         
         // Check if Docker is available
         val dockerPath = dockerManager.dockerPath

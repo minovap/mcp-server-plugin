@@ -35,7 +35,7 @@ object DockerDefaults {
 /**
  * Manages Docker operations for safe terminal command execution
  */
-class DockerManager(private val projectDir: String) {
+class DockerManager(private val projectDir: String, private val projectName: String) {
 
     // Store the Dockerfile content hash from the last build
     // This helps detect when Dockerfile content has changed
@@ -50,7 +50,11 @@ class DockerManager(private val projectDir: String) {
     /**
      * Generate a unique container name based on project directory hash
      */
-    val containerName: String = "mcp-intellij-container-${projectDir.hashCode().absoluteValue}"
+    val containerName: String = if (!projectName.isNullOrEmpty()) {
+        "mcp-intellij-$projectName"
+    } else {
+        "mcp-intellij-container-${projectDir.hashCode().absoluteValue}"
+    }
 
     /**
      * Prefix for container names for cleanup purposes
@@ -428,34 +432,278 @@ class DockerManager(private val projectDir: String) {
     fun executeCommand(command: String): String {
         val dockerPath = dockerPath ?: return "Docker executable not found"
 
+        // Check if tmux is available in the container
+        val tmuxAvailable = isTmuxAvailable(dockerPath, containerName)
+
+        return if (tmuxAvailable) {
+            executeTmuxCommand(dockerPath, command)
+        } else {
+            executeSimpleCommand(dockerPath, command)
+        }
+    }
+
+    /**
+     * Checks if tmux is available in the container
+     *
+     * @param dockerPath Path to docker executable
+     * @param containerName Name of the container
+     * @return True if tmux is available, false otherwise
+     */
+    private fun isTmuxAvailable(dockerPath: String, containerName: String): Boolean {
+        val checkTmuxCommand = listOf(
+            dockerPath, "exec",
+            containerName,
+            "bash", "-c",
+            "command -v tmux >/dev/null 2>&1 && echo 'DOCKER_AVAILABLE' || echo 'NO_DOCKER_FOUND'"
+        )
+
+        try {
+            val checkProcess = ProcessBuilder(checkTmuxCommand)
+                .redirectErrorStream(true)
+                .start()
+
+            val result = checkProcess.inputStream.bufferedReader().readText().trim()
+            checkProcess.waitFor()
+
+            return result.contains("DOCKER_AVAILABLE")
+        } catch (e: Exception) {
+            return false
+        }
+    }
+
+    /**
+     * Executes a command in the Docker container using the original simple approach
+     *
+     * @param dockerPath Path to docker executable
+     * @param command The command to execute
+     * @return The command output or error message
+     */
+    private fun executeSimpleCommand(dockerPath: String, command: String): String {
+        LOG.info("DOCKER_SIMPLE_EXEC: Using simple execution method")
         val execCommand = listOf(
             dockerPath, "exec",
             "-w", projectDir,
             containerName,
             "bash", "-c", command
         )
-
         try {
             val process = ProcessBuilder(execCommand)
                 .redirectErrorStream(true)
                 .start()
-
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             val output = StringBuilder()
             var line: String?
-
             while (reader.readLine().also { line = it } != null) {
                 output.append(line).append("\n")
             }
-
             val exitCode = process.waitFor()
             if (exitCode != 0) {
                 output.append("\nExit code: ").append(exitCode)
             }
-
             return output.toString()
         } catch (e: Exception) {
             return "Error executing command: ${e.message}"
+        }
+    }
+
+    /**
+     * Executes a command in the Docker container using tmux for better user experience
+     *
+     * @param dockerPath Path to docker executable
+     * @param command The command to execute
+     * @return The command output or error message
+     */
+    private fun executeTmuxCommand(dockerPath: String, command: String): String {
+        LOG.info("DOCKER_TMUX_EXEC: Using tmux execution method")
+
+        // Generate a unique output file for this command
+        val outputFileId = System.currentTimeMillis().toString()
+        val outputFileName = "/tmp/docker_output_$outputFileId.txt"
+        val markerFileName = "/tmp/docker_marker_$outputFileId.txt"
+
+        // Fixed tmux session name for predictable connection
+        val tmuxSessionName = "llm-session"
+
+        // First, ensure the tmux session exists
+        val createSessionCommand = listOf(
+            dockerPath, "exec",
+            containerName,
+            "bash", "-c",
+            "tmux has-session -t $tmuxSessionName 2>/dev/null || tmux new-session -d -s $tmuxSessionName"
+        )
+
+        try {
+            val sessionProcess = ProcessBuilder(createSessionCommand).start()
+            sessionProcess.waitFor()
+        } catch (e: Exception) {
+            LOG.warn("DOCKER_TMUX_ERROR: Failed to create tmux session: ${e.message}")
+        }
+
+        // before running a command send CTRL+C to cancel any input from a human tmux observer
+        val interruptCommand = listOf(
+            dockerPath, "exec",
+            containerName,
+            "bash", "-c",
+            """tmux send-keys -t $tmuxSessionName C-c"""
+        )
+
+        try {
+            ProcessBuilder(interruptCommand).start().waitFor()
+            // Small delay to ensure the interrupt is processed
+            Thread.sleep(200)
+        } catch (e: Exception) {
+            LOG.warn("DOCKER_INTERRUPT_ERROR: Failed to send interrupt: ${e.message}")
+        }
+
+        // Prepare a command that will:
+        // 1. Run in tmux (for visual feedback)
+        // 2. Save complete output to a file
+        // 3. Create a marker file when done
+        val wrappedCommand = """
+        cd $projectDir && 
+        clear &&
+        (echo "~/# $command" && 
+        $command && 
+        echo $? > ${outputFileName}.exit || 
+        echo $? > ${outputFileName}.exit) | 
+        tee $outputFileName && 
+        touch $markerFileName
+    """.trimIndent().replace("\n", " ")
+
+        // Run the command in the tmux session
+        val execCommand = listOf(
+            dockerPath, "exec",
+            "-w", projectDir,
+            containerName,
+            "bash", "-c",
+            """tmux send-keys -t $tmuxSessionName '$wrappedCommand' C-m"""
+        )
+
+        // Send the command to tmux
+        LOG.info("DOCKER_CMD_START: Sending command to tmux")
+        ProcessBuilder(execCommand).start().waitFor()
+
+        // Give a moment for the process to start
+        Thread.sleep(100)
+        LOG.info("DOCKER_CMD_WAITING: Waiting for command to complete")
+
+        // Poll for command completion by checking for the marker file
+        val maxWaitTimeMs = 30000L // 30 seconds timeout
+        val pollIntervalMs = 250L
+        val startTime = System.currentTimeMillis()
+
+        var isCommandComplete = false
+
+        // Wait for the command to complete by checking for marker file
+        while (System.currentTimeMillis() - startTime < maxWaitTimeMs && !isCommandComplete) {
+            // Check if the marker file exists
+            val checkMarkerCommand = listOf(
+                dockerPath, "exec",
+                containerName,
+                "bash", "-c",
+                "[ -f $markerFileName ] && echo 'COMPLETE' || echo 'RUNNING'"
+            )
+
+            try {
+                val checkProcess = ProcessBuilder(checkMarkerCommand)
+                    .redirectErrorStream(true)
+                    .start()
+
+                val markerCheck = checkProcess.inputStream.bufferedReader().readText().trim()
+                checkProcess.waitFor()
+
+                // Check if the marker file exists
+                isCommandComplete = markerCheck.contains("COMPLETE")
+
+                if (isCommandComplete) {
+                    LOG.info("DOCKER_CMD_COMPLETE: Command completed (marker file found)")
+                    break
+                }
+            } catch (e: Exception) {
+                LOG.warn("DOCKER_CHECK_ERROR: Error checking command status: ${e.message}")
+            }
+
+            // Wait before polling again
+            Thread.sleep(pollIntervalMs)
+        }
+
+        if (!isCommandComplete) {
+            // If we get here, the process didn't complete within the timeout
+            LOG.warn("DOCKER_CMD_TIMEOUT: Command execution timed out after ${maxWaitTimeMs/1000} seconds")
+            return "[Command execution timed out after ${maxWaitTimeMs/1000} seconds]"
+        }
+
+        // Get command exit code from file
+        val cmdExitCodeCommand = listOf(
+            dockerPath, "exec",
+            containerName,
+            "cat", "${outputFileName}.exit"
+        )
+
+        val cmdExitCodeProcess = ProcessBuilder(cmdExitCodeCommand).start()
+        val cmdExitCode = cmdExitCodeProcess.inputStream.bufferedReader().readText().trim().toIntOrNull() ?: -1
+        cmdExitCodeProcess.waitFor()
+
+        LOG.info("DOCKER_CMD_EXIT_CODE: Command inside container exited with code: $cmdExitCode")
+
+        // Read the output file
+        val catCommand = listOf(
+            dockerPath, "exec",
+            containerName,
+            "cat", outputFileName
+        )
+
+        try {
+            val process = ProcessBuilder(catCommand)
+                .redirectErrorStream(true)
+                .start()
+
+            val output = process.inputStream.bufferedReader().readText()
+            process.waitFor()
+
+            LOG.info("DOCKER_OUTPUT_RAW_SIZE: Got ${output.length} characters of output")
+
+            // Split the output by lines
+            val lines = output.split("\n")
+            LOG.info("DOCKER_LINES_COUNT: ${lines.size}")
+
+            if (lines.isNotEmpty()) {
+                LOG.info("DOCKER_FIRST_LINE: \"${lines.firstOrNull() ?: ""}\"")
+                if (lines.size > 1) {
+                    LOG.info("DOCKER_SECOND_LINE: \"${lines.getOrNull(1) ?: ""}\"")
+                }
+                LOG.info("DOCKER_LAST_LINE: \"${lines.lastOrNull() ?: ""}\"")
+                if (lines.size > 1) {
+                    LOG.info("DOCKER_SECOND_LAST_LINE: \"${lines.getOrElse(lines.size - 2) { "" }}\"")
+                }
+            }
+
+            // Process output: remove the first line that contains the command echo
+            val processedLines = if (lines.isNotEmpty()) {
+                // Skip the first line (which is the echoed command)
+                lines.drop(1)
+            } else {
+                lines
+            }
+
+            // Clean up temporary files
+            val cleanupCommand = listOf(
+                dockerPath, "exec",
+                containerName,
+                "bash", "-c",
+                "rm -f $outputFileName ${outputFileName}.exit $markerFileName"
+            )
+
+            ProcessBuilder(cleanupCommand).start()
+            LOG.info("DOCKER_CLEANUP: Removed temporary output files")
+
+            val finalOutput = processedLines.joinToString("\n")
+            LOG.info("DOCKER_OUTPUT_FINAL_SIZE: ${finalOutput.length}")
+
+            return finalOutput
+        } catch (e: Exception) {
+            LOG.error("DOCKER_ERROR: Error reading command output: ${e.message}", e)
+            return "Error capturing command output: ${e.message}"
         }
     }
 
