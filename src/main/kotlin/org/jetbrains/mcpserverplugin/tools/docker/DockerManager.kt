@@ -427,18 +427,19 @@ class DockerManager(private val projectDir: String, private val projectName: Str
      * Executes a command in the Docker container
      *
      * @param command The command to execute
+     * @param timeoutMs Optional timeout in milliseconds (default is 1800000 - 30 minutes)
      * @return The command output or error message
      */
-    fun executeCommand(command: String): String {
+    fun executeCommand(command: String, timeoutMs: Int = 1800000): String {
         val dockerPath = dockerPath ?: return "Docker executable not found"
 
         // Check if tmux is available in the container
         val tmuxAvailable = isTmuxAvailable(dockerPath, containerName)
 
         return if (tmuxAvailable) {
-            executeTmuxCommand(dockerPath, command)
+            executeTmuxCommand(dockerPath, command, timeoutMs)
         } else {
-            executeSimpleCommand(dockerPath, command)
+            executeSimpleCommand(dockerPath, command, timeoutMs)
         }
     }
 
@@ -476,10 +477,11 @@ class DockerManager(private val projectDir: String, private val projectName: Str
      *
      * @param dockerPath Path to docker executable
      * @param command The command to execute
+     * @param timeoutMs Timeout in milliseconds
      * @return The command output or error message
      */
-    private fun executeSimpleCommand(dockerPath: String, command: String): String {
-        LOG.info("DOCKER_SIMPLE_EXEC: Using simple execution method")
+    private fun executeSimpleCommand(dockerPath: String, command: String, timeoutMs: Int = 1800000): String {
+        LOG.info("DOCKER_SIMPLE_EXEC: Using simple execution method with timeout ${timeoutMs}ms")
         val execCommand = listOf(
             dockerPath, "exec",
             "-w", projectDir,
@@ -490,16 +492,56 @@ class DockerManager(private val projectDir: String, private val projectName: Str
             val process = ProcessBuilder(execCommand)
                 .redirectErrorStream(true)
                 .start()
+                
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             val output = StringBuilder()
-            var line: String?
-            while (reader.readLine().also { line = it } != null) {
-                output.append(line).append("\n")
+            
+            // Start a timeout handler
+            val future = java.util.concurrent.CompletableFuture<Boolean>()
+            val timeoutThread = Thread {
+                try {
+                    Thread.sleep(timeoutMs.toLong())
+                    if (!future.isDone) {
+                        LOG.warn("DOCKER_TIMEOUT: Command execution timed out after ${timeoutMs/1000} seconds")
+                        process.destroy()
+                        future.complete(false)
+                    }
+                } catch (e: InterruptedException) {
+                    // Thread was interrupted, which means process completed
+                }
             }
-            val exitCode = process.waitFor()
+            timeoutThread.isDaemon = true
+            timeoutThread.start()
+            
+            var line: String?
+            try {
+                while (reader.readLine().also { line = it } != null) {
+                    output.append(line).append("\n")
+                }
+                future.complete(true)
+            } catch (e: Exception) {
+                LOG.warn("DOCKER_READ_ERROR: Error reading process output: ${e.message}")
+                if (!future.isDone) {
+                    future.complete(false)
+                }
+            }
+            
+            val completed = future.getNow(false)
+            if (!completed) {
+                return output.toString() + "\n[Command execution timed out after ${timeoutMs/1000} seconds]"
+            }
+            
+            val exitCode = if (process.isAlive) {
+                process.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)
+                process.exitValue()
+            } else {
+                process.exitValue()
+            }
+            
             if (exitCode != 0) {
                 output.append("\nExit code: ").append(exitCode)
             }
+            
             return output.toString()
         } catch (e: Exception) {
             return "Error executing command: ${e.message}"
@@ -511,9 +553,10 @@ class DockerManager(private val projectDir: String, private val projectName: Str
      *
      * @param dockerPath Path to docker executable
      * @param command The command to execute
+     * @param timeoutMs Timeout in milliseconds
      * @return The command output or error message
      */
-    private fun executeTmuxCommand(dockerPath: String, command: String): String {
+    private fun executeTmuxCommand(dockerPath: String, command: String, timeoutMs: Int = 1800000): String {
         LOG.info("DOCKER_TMUX_EXEC: Using tmux execution method")
 
         // Generate a unique output file for this command
@@ -588,7 +631,7 @@ class DockerManager(private val projectDir: String, private val projectName: Str
         LOG.info("DOCKER_CMD_WAITING: Waiting for command to complete")
 
         // Poll for command completion by checking for the marker file
-        val maxWaitTimeMs = 30000L // 30 seconds timeout
+        val maxWaitTimeMs = timeoutMs.toLong() // Use provided timeout
         val pollIntervalMs = 250L
         val startTime = System.currentTimeMillis()
 

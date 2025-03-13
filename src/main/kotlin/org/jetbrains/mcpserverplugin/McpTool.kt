@@ -7,6 +7,8 @@ import kotlin.reflect.KClass
 interface McpTool<Args : Any> {
     val name: String
     val description: String
+    val isClaudeCodeTool: Boolean
+        get() = false
     fun handle(project: Project, args: Args): Response
 }
 

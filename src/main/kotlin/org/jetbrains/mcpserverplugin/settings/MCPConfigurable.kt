@@ -185,12 +185,28 @@ class MCPConfigurable : Configurable {
                 toolCheckboxes.values.forEach { it.isSelected = false }
             }
 
+            // Create "Select Only Claude Code Tools" button
+            val selectClaudeToolsButton = JButton("Select Only Claude Code Tools")
+            selectClaudeToolsButton.addActionListener {
+                // First, deselect all tools
+                toolCheckboxes.values.forEach { it.isSelected = false }
+                
+                // Then, select only Claude Code tools
+                val claudeTools = McpToolManager.getAllTools()
+                claudeTools.filter { it.isClaudeCodeTool }
+                     .forEach { tool -> 
+                         toolCheckboxes[tool.name]?.isSelected = true 
+                     }
+            }
+            
             // Add buttons to a panel
             val buttonPanel = JPanel()
             buttonPanel.layout = BoxLayout(buttonPanel, BoxLayout.X_AXIS)
             buttonPanel.add(selectAllButton)
             buttonPanel.add(Box.createHorizontalStrut(10))
             buttonPanel.add(deselectAllButton)
+            buttonPanel.add(Box.createHorizontalStrut(10))
+            buttonPanel.add(selectClaudeToolsButton)
             buttonPanel.add(Box.createHorizontalGlue())
             buttonPanel.border = BorderFactory.createEmptyBorder(5, 5, 5, 5)
 
