@@ -24,7 +24,7 @@ object DockerDefaults {
     /**
      * Default Docker image to use when none is specified
      */
-    const val DEFAULT_IMAGE = MCPConfigurable.DEFAULT_DOCKER_IMAGE
+    const val DEFAULT_IMAGE = "gitpod/workspace-full"
 
     /**
      * Default platform to use for the default image (null means use host platform)
@@ -603,15 +603,13 @@ class DockerManager(private val projectDir: String, private val projectName: Str
         // 2. Save complete output to a file
         // 3. Create a marker file when done
         val wrappedCommand = """
-        cd $projectDir && 
-        clear &&
-        (echo "~/# $command" && 
-        $command && 
-        echo $? > ${outputFileName}.exit || 
-        echo $? > ${outputFileName}.exit) | 
-        tee $outputFileName && 
-        touch $markerFileName
-    """.trimIndent().replace("\n", " ")
+            cd $projectDir && 
+            clear &&
+            (echo "~/# $command" && 
+            { $command; echo $? > ${outputFileName}.exit; } 2>&1) | 
+            tee $outputFileName && 
+            touch $markerFileName
+        """.trimIndent().replace("\n", " ")
 
         // Run the command in the tmux session
         val execCommand = listOf(
