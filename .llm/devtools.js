@@ -30,7 +30,7 @@ socket.addEventListener('message', function (event) {
     // Format different message types
     if (data.type === 'new-chat') {
       console.log(`Starting new chat: ${data.content}`, 'color: blue; font-weight: bold');
-  	  document.querySelector('a[href="/new"]').click();
+  	  document.querySelector('a[href="/new"].flex').click();
         setTimeout(() => {
             document.querySelector('.ProseMirror').textContent = data.content;
 
