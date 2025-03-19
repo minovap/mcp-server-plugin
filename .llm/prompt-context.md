@@ -15,10 +15,5 @@ Please analyze the code context referenced below and complete this task:
 ---
 
 # Code context
-Code context below is incomplete, read the file to get the full content
 
 {{CONTEXT}}
-
-```
-{{CODE}}
-```
