@@ -28,11 +28,17 @@ import org.intellij.markdown.parser.MarkdownParser
 object LLMTodoContentCreator {
     
     /**
-     * Creates the formatted content for the LLM task using the template from .llm/prompt-context.md
+     * Creates the formatted content for the LLM task using the selected template
+     * 
+     * @param elementInfo Information about the code element
+     * @param surroundingCode The surrounding code context
+     * @param userInput User's task description
+     * @param project The project (used for resolving template paths)
+     * @param templateName Optional template name to use
      */
-    fun createTodoContent(elementInfo: String, surroundingCode: String, userInput: String, project: Project? = null): String {
-        // Get the template from .llm/prompt-context.md file or use default
-        val template = getPromptTemplate(project)
+    fun createTodoContent(elementInfo: String, surroundingCode: String, userInput: String, project: Project? = null, templateName: String? = null): String {
+        // Get the template based on the provided template name
+        val template = getPromptTemplate(project, templateName)
         
         // Build the context section, including code if provided
         val contextContent = if (surroundingCode.isNotEmpty()) {
@@ -51,25 +57,78 @@ object LLMTodoContentCreator {
     }
     
     /**
-     * Gets the prompt template from .llm/prompt-context.md file or uses the default template
+     * Gets the prompt template from the specified file or directory, or uses the default template
+     * @param project The project for resolving template paths
+     * @param templateName Optional template name; if specified, looks for a file with this name in the prompt-contexts directory
      */
-    private fun getPromptTemplate(project: Project?): String {
+    fun getPromptTemplate(project: Project?, templateName: String? = null): String {
         project?.let {
             val projectDir = project.guessProjectDir()
-            val templatePath = projectDir?.path?.let { path -> Paths.get(path, ".llm", "prompt-context.md") }
-            if (templatePath != null && Files.exists(templatePath)) {
-                return Files.readString(templatePath)
+            projectDir?.path?.let { projectPath -> 
+                // If a specific template is requested, look in prompt-contexts directory
+                if (templateName != null && templateName.isNotEmpty()) {
+                    val templatePath = Paths.get(projectPath, ".llm", "prompt-contexts", "$templateName.md")
+                    if (Files.exists(templatePath)) {
+                        return Files.readString(templatePath)
+                    }
+                }
+                
+                // Default to prompt-context.md if it exists
+                val defaultTemplatePath = Paths.get(projectPath, ".llm", "prompt-context.md")
+                if (Files.exists(defaultTemplatePath)) {
+                    return Files.readString(defaultTemplatePath)
+                }
             }
         }
         return DEFAULT_TEMPLATE
     }
     
     /**
+     * Lists available prompt templates in the project
+     * @param project The project for resolving template paths
+     * @return A map of template names to their paths
+     */
+    fun listAvailableTemplates(project: Project?): Map<String, String> {
+        val templates = mutableMapOf<String, String>()
+        templates["Default"] = "default" // Always include the default template
+        
+        project?.let {
+            val projectDir = project.guessProjectDir()
+            projectDir?.path?.let { projectPath -> 
+                // Add the default prompt-context.md if it exists
+                val defaultTemplatePath = Paths.get(projectPath, ".llm", "prompt-context.md")
+                if (Files.exists(defaultTemplatePath)) {
+                    templates["prompt-context"] = "prompt-context"
+                }
+                
+                // Look for templates in the prompt-contexts directory
+                val promptContextsDir = Paths.get(projectPath, ".llm", "prompt-contexts")
+                if (Files.exists(promptContextsDir) && Files.isDirectory(promptContextsDir)) {
+                    try {
+                        Files.list(promptContextsDir).forEach { path ->
+                            if (Files.isRegularFile(path) && path.toString().endsWith(".md")) {
+                                val fileName = path.fileName.toString()
+                                val templateName = fileName.removeSuffix(".md")
+                                templates[templateName] = templateName
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // Log or handle exception as appropriate
+                        println("Error listing templates: ${e.message}")
+                    }
+                }
+            }
+        }
+        
+        return templates
+    }
+    
+    /**
      * Legacy method to support the old format - will be removed in future
      */
-    @Deprecated("Use the createTodoContent with project parameter", ReplaceWith("createTodoContent(elementInfo, surroundingCode, userInput, null)"))
+    @Deprecated("Use the createTodoContent with project parameter", ReplaceWith("createTodoContent(elementInfo, surroundingCode, userInput, null, null)"))
     fun createTodoContent(elementInfo: String, surroundingCode: String, userInput: String): String {
-        return createTodoContent(elementInfo, surroundingCode, userInput, null)
+        return createTodoContent(elementInfo, surroundingCode, userInput, null, null)
     }
     
     /**
@@ -186,10 +245,11 @@ object LLMTodoContentCreator {
      * @param surroundingCode The code surrounding the element
      * @param userInput User's task description
      * @param project Optional project reference for template resolution
+     * @param templateName Optional template name to use
      * @return HTML representation of the LLM task
      */
-    fun createHtmlTodoContent(elementInfo: String, surroundingCode: String, userInput: String, project: Project? = null): String {
-        val markdownContent = createTodoContent(elementInfo, surroundingCode, userInput, project)
+    fun createHtmlTodoContent(elementInfo: String, surroundingCode: String, userInput: String, project: Project? = null, templateName: String? = null): String {
+        val markdownContent = createTodoContent(elementInfo, surroundingCode, userInput, project, templateName)
         return markdownToHtml(markdownContent)
     }
     

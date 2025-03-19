@@ -11,6 +11,7 @@ import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.ValidationInfo
+import com.intellij.openapi.ui.ComboBox
 import com.intellij.ui.JBSplitter
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBRadioButton
@@ -25,10 +26,14 @@ import java.awt.FlowLayout
 import java.awt.GridLayout
 import java.awt.event.ActionEvent
 import java.awt.event.ActionListener
+import java.awt.event.ItemEvent
+import java.awt.event.ItemListener
 import java.awt.event.KeyEvent
 import javax.swing.AbstractAction
 import javax.swing.BorderFactory
 import javax.swing.ButtonGroup
+import javax.swing.DefaultComboBoxModel
+import javax.swing.JComboBox
 import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.JRadioButton
@@ -49,6 +54,11 @@ class LLMTodoDialog(
 ) : DialogWrapper(project) {
     private val textArea = JBTextArea(8, 50)
     
+    // Template selection dropdown
+    private val templateComboBox = ComboBox<String>()
+    private val availableTemplates: Map<String, String>
+    private var selectedTemplateName: String? = null
+    
     // Sample element info and code for preview
     private val sampleElementInfo = "File: ./example/path/MyFile.kt\nClass: ExampleClass\nFunction: exampleFunction\nLine: 42"
     private val sampleCode = "// This is a sample code preview\nfun exampleFunction() {\n    val greeting = \"Hello, World!\"\n    println(greeting)\n    // Additional code would appear here\n    return greeting\n}"
@@ -66,6 +76,9 @@ class LLMTodoDialog(
     init {
         title = "Use with LLM"
         
+        // Initialize available templates
+        availableTemplates = LLMTodoContentCreator.listAvailableTemplates(project)
+        
         // Prepare actual content if available
         if (selectedElement != null && file != null) {
             actualElementInfo = org.jetbrains.mcpserverplugin.actions.element.ElementInfoBuilder.getElementInfo(selectedElement, file)
@@ -82,6 +95,9 @@ class LLMTodoDialog(
         
         // Create the preview editor with markdown highlighting
         initPreviewEditor()
+        
+        // Setup template combobox
+        initTemplateComboBox()
         
         init()
         
@@ -104,6 +120,35 @@ class LLMTodoDialog(
         
         // Initial preview update
         updatePreview()
+    }
+    
+    /**
+     * Initialize the template selection combobox
+     */
+    private fun initTemplateComboBox() {
+        // Add available templates to the combobox
+        val model = DefaultComboBoxModel<String>()
+        
+        // Always include default template first
+        model.addElement("Default")
+        selectedTemplateName = "default"
+        
+        // Add other templates sorted alphabetically
+        availableTemplates.keys
+            .filter { it != "Default" }
+            .sorted()
+            .forEach { model.addElement(it) }
+            
+        templateComboBox.model = model
+        
+        // Add listener to update preview when template changes
+        templateComboBox.addItemListener { event ->
+            if (event.stateChange == ItemEvent.SELECTED) {
+                val selectedTemplate = event.item as String
+                selectedTemplateName = availableTemplates[selectedTemplate]
+                updatePreview()
+            }
+        }
     }
     
     /**
@@ -169,7 +214,8 @@ class LLMTodoDialog(
             elementInfo = elementInfo,
             surroundingCode = codeToUse,
             userInput = if (userInput.isBlank()) "[Your task description]" else userInput,
-            project = project
+            project = project,
+            templateName = selectedTemplateName
         )
         
         // Update the document text
@@ -199,7 +245,8 @@ class LLMTodoDialog(
             elementInfo = elementInfo,
             surroundingCode = surroundingCode,
             userInput = if (userInput.isBlank()) "[Your task description]" else userInput,
-            project = project
+            project = project,
+            templateName = selectedTemplateName
         )
         
         // Update the document text
@@ -225,7 +272,8 @@ class LLMTodoDialog(
             elementInfo = sampleElementInfo,
             surroundingCode = codeToUse,
             userInput = if (userInput.isBlank()) "[Your task description]" else userInput,
-            project = project
+            project = project,
+            templateName = selectedTemplateName
         )
         
         // Update the document text
@@ -305,14 +353,28 @@ class LLMTodoDialog(
         return textArea.text
     }
     
+    fun getSelectedTemplateName(): String? {
+        return selectedTemplateName
+    }
+    
     @Nullable
     override fun createCenterPanel(): JComponent {
         val panel = JPanel(BorderLayout(0, 10))
         panel.border = JBUI.Borders.empty(10)
         
         // Top section with label
+        val topPanel = JPanel(BorderLayout(10, 0))
         val label = JBLabel("What would you like to do with this code?")
-        panel.add(label, BorderLayout.NORTH)
+        topPanel.add(label, BorderLayout.WEST)
+        
+        // Template selection dropdown with label
+        val templatePanel = JPanel(BorderLayout(5, 0))
+        val templateLabel = JBLabel("Template:")
+        templatePanel.add(templateLabel, BorderLayout.WEST)
+        templatePanel.add(templateComboBox, BorderLayout.CENTER)
+        
+        topPanel.add(templatePanel, BorderLayout.EAST)
+        panel.add(topPanel, BorderLayout.NORTH)
         
         // Create a splitter for the input and preview
         val splitter = JBSplitter(true, 0.3f, 0.2f, 0.8f)

@@ -43,6 +43,7 @@ class AddToLLMTodoAction : AnAction() {
         val dialog = LLMTodoDialog(project, selectedElement, file, editor, includeCode = hasTextSelection)
         if (dialog.showAndGet()) {
             val userInput = dialog.getUserInput()
+            val selectedTemplate = dialog.getSelectedTemplateName()
             
             // Get element info for the todo
             val elementInfo = ElementInfoBuilder.getElementInfo(selectedElement, file)
@@ -58,7 +59,7 @@ class AddToLLMTodoAction : AnAction() {
             }
             
             // Create the todo content
-            val todoContent = LLMTodoContentCreator.createTodoContent(elementInfo, surroundingCode, userInput, project)
+            val todoContent = LLMTodoContentCreator.createTodoContent(elementInfo, surroundingCode, userInput, project, selectedTemplate)
             
             // Get plugin settings
             val settings = service<PluginSettings>()

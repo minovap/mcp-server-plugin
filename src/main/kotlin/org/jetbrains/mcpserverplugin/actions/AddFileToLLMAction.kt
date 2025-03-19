@@ -39,6 +39,7 @@ class AddFileToLLMAction : AnAction(), DumbAware {
         val dialog = LLMTodoDialog(project, selectedFiles = selectedFiles, includeCode = false)
         if (dialog.showAndGet()) {
             val userInput = dialog.getUserInput()
+            val selectedTemplate = dialog.getSelectedTemplateName()
             
             // Process selected files - only include file paths without content
             val fileContents = buildFileContents(selectedFiles, project, includeContent = false)
@@ -48,7 +49,8 @@ class AddFileToLLMAction : AnAction(), DumbAware {
                 elementInfo = buildElementInfo(fileContents),
                 surroundingCode = "", // Don't include code
                 userInput = userInput,
-                project = project
+                project = project,
+                templateName = selectedTemplate
             )
             
             // Get plugin settings
