@@ -45,8 +45,8 @@ class AddToLLMTodoAction : AnAction() {
             val elementInfo = ElementInfoBuilder.getElementInfo(selectedElement, file)
             val surroundingCode = ElementInfoBuilder.getSurroundingCode(selectedElement, file, editor, 50)
             
-            // Create the todo content
-            val todoContent = LLMTodoContentCreator.createTodoContent(elementInfo, surroundingCode, userInput, project)
+            // Create the todo content as HTML by default
+            val todoContent = LLMTodoContentCreator.createHtmlTodoContent(elementInfo, surroundingCode, userInput, project)
             
             // Get plugin settings
             val settings = service<PluginSettings>()

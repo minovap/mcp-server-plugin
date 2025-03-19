@@ -32,7 +32,7 @@ socket.addEventListener('message', function (event) {
       console.log(`Starting new chat: ${data.content}`, 'color: blue; font-weight: bold');
   	  document.querySelector('a[href="/new"].flex').click();
         setTimeout(() => {
-            document.querySelector('.ProseMirror').textContent = data.content;
+            document.querySelector('.ProseMirror').innerHTML = data.content;
 
             setTimeout(() => {
               document.querySelector('button[aria-label="Send Message"]').click();

@@ -43,8 +43,8 @@ class AddFileToLLMAction : AnAction(), DumbAware {
             // Process selected files
             val fileContents = buildFileContents(selectedFiles, project)
             
-            // Create the todo content
-            val todoContent = LLMTodoContentCreator.createTodoContent(
+            // Create the todo content as HTML by default
+            val todoContent = LLMTodoContentCreator.createHtmlTodoContent(
                 elementInfo = buildElementInfo(fileContents),
                 surroundingCode = buildSurroundingCode(fileContents),
                 userInput = userInput,

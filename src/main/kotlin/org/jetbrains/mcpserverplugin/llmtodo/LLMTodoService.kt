@@ -41,17 +41,30 @@ class LLMTodoService(private val project: Project) {
      * @return The created VirtualFile, or null if creation failed
      */
     fun createScratchFile(fileName: String, content: String): VirtualFile? {
+        // Determine if content looks like HTML
+        val isHtml = content.trim().startsWith("<") && content.contains("</")
+        
         // Create a scratch file using IntelliJ's ScratchFileService
         return ApplicationManager.getApplication().runWriteAction<VirtualFile> {
             try {
-                // Find the Markdown language
-                val markdownLang = Language.findLanguageByID("Markdown")
+                // Find the appropriate language based on content
+                val language = if (isHtml) {
+                    Language.findLanguageByID("HTML") ?: Language.findLanguageByID("Markdown")
+                } else {
+                    Language.findLanguageByID("Markdown")
+                }
                 
-                // Create the scratch file
+                // Create the scratch file with the appropriate extension
+                val finalFileName = if (isHtml && language?.id == "HTML") {
+                    fileName.replace(".md", ".html")
+                } else {
+                    fileName
+                }
+                
                 val scratchFile = ScratchRootType.getInstance().createScratchFile(
                     project,
-                    fileName,
-                    markdownLang,
+                    finalFileName,
+                    language,
                     content
                 )
                 
