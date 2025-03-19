@@ -3,12 +3,18 @@ package org.jetbrains.mcpserverplugin.actions
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.VirtualFile
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import org.jetbrains.mcpserverplugin.MCPWebSocketService
+import org.jetbrains.mcpserverplugin.NewChatMessage
 import org.jetbrains.mcpserverplugin.actions.todo.LLMTodoContentCreator
 import org.jetbrains.mcpserverplugin.actions.ui.LLMTodoDialog
+import org.jetbrains.mcpserverplugin.settings.PluginSettings
 import java.io.File
 
 /**
@@ -45,15 +51,19 @@ class AddFileToLLMAction : AnAction(), DumbAware {
                 project = project
             )
             
-            // Copy to clipboard
-            LLMTodoContentCreator.copyToClipboard(todoContent)
+            // Get plugin settings
+            val settings = service<PluginSettings>()
             
-            // Show a notification that content has been copied to clipboard
-            Messages.showInfoMessage(
-                project,
-                "LLM task content has been copied to clipboard.",
-                "LLM Task Created"
-            )
+            // Copy to clipboard if enabled in settings
+            if (settings.copyToClipboard) {
+                LLMTodoContentCreator.copyToClipboard(todoContent)
+            }
+            
+            // Check if auto-send WebSocket message is enabled in settings
+            if (settings.autoSendWebSocketMessage) {
+                // Send the content to WebSocket clients
+                sendToWebSocketClients(todoContent)
+            }
         }
     }
     
@@ -120,6 +130,28 @@ class AddFileToLLMAction : AnAction(), DumbAware {
     
     companion object {
         private const val MAX_FILE_SIZE = 1024 * 1024 // 1MB max file size
+        private val json = Json { prettyPrint = true }
+        
+        /**
+         * Sends the task content to all connected WebSocket clients
+         */
+        private fun sendToWebSocketClients(content: String) {
+            try {
+                // Create a simple JSON object manually to ensure proper format
+                val jsonMessage = """
+                {
+                    "type": "new-chat",
+                    "content": ${json.encodeToString(content)}
+                }
+                """.trimIndent()
+                
+                // Send to all clients
+                MCPWebSocketService.getInstance().sendMessageToAllClients(jsonMessage)
+            } catch (e: Exception) {
+                // Log error but don't block user flow
+                println("Error sending message to WebSocket clients: ${e.message}")
+            }
+        }
     }
     
     data class FileContent(

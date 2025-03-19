@@ -27,6 +27,10 @@ class PluginSettings : PersistentStateComponent<PluginSettings> {
     var dockerImage: String = DEFAULT_DOCKER_IMAGE
     var useDefaultDockerImage: Boolean = true
     
+    // LLM action settings
+    var autoSendWebSocketMessage: Boolean = false
+    var copyToClipboard: Boolean = true
+    
     // LLM prompt template setting
     var llmPromptTemplate: String? = null
     
@@ -79,6 +83,8 @@ class PluginSettings : PersistentStateComponent<PluginSettings> {
                 "shouldShowClaudeSettingsNotification=$shouldShowClaudeSettingsNotification, " +
                 "dockerImage=$dockerImage, " +
                 "useDefaultDockerImage=$useDefaultDockerImage, " +
+                "autoSendWebSocketMessage=$autoSendWebSocketMessage, " +
+                "copyToClipboard=$copyToClipboard, " +
                 "disabledTools=$disabledTools")
     }
 }

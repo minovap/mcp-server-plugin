@@ -29,6 +29,8 @@ class MCPConfigurable : Configurable {
     private var showNodeCheckbox: JCheckBox? = null
     private var showClaudeCheckbox: JCheckBox? = null
     private var showClaudeSettingsCheckbox: JCheckBox? = null
+    private var autoSendWebSocketCheckbox: JCheckBox? = null
+    private var copyToClipboardCheckbox: JCheckBox? = null
     private var dockerImageField: JBTextField? = null
 
     // Store tool checkboxes by name
@@ -43,6 +45,10 @@ class MCPConfigurable : Configurable {
         showNodeCheckbox = JCheckBox("Show Node Notification")
         showClaudeCheckbox = JCheckBox("Show Claude Notification")
         showClaudeSettingsCheckbox = JCheckBox("Show Claude Settings Notification")
+        
+        // Initialize LLM action settings
+        autoSendWebSocketCheckbox = JCheckBox("Auto-send WebSocket messages when using Add to LLM actions")
+        copyToClipboardCheckbox = JCheckBox("Copy to clipboard when using Add to LLM actions")
 
         // Create Docker image field
         dockerImageField = JBTextField(30)
@@ -226,10 +232,17 @@ class MCPConfigurable : Configurable {
             notificationPanel.add(showClaudeSettingsCheckbox)
             notificationPanel.border = BorderFactory.createTitledBorder("Notification Settings")
             
+            // Create panel for LLM action settings
+            val llmActionPanel = JPanel(GridLayout(2, 1))
+            llmActionPanel.add(copyToClipboardCheckbox)
+            llmActionPanel.add(autoSendWebSocketCheckbox)
+            llmActionPanel.border = BorderFactory.createTitledBorder("LLM Action Settings")
+            
             // Add all panels to main
             val mainContent = JPanel()
             mainContent.layout = BoxLayout(mainContent, BoxLayout.Y_AXIS)
             mainContent.add(notificationPanel)
+            mainContent.add(llmActionPanel)
             mainContent.add(dockerPanel)
             mainContent.add(promptNotePanel)
             
@@ -255,6 +268,8 @@ class MCPConfigurable : Configurable {
         if (showNodeCheckbox?.isSelected != settings.shouldShowNodeNotification ||
             showClaudeCheckbox?.isSelected != settings.shouldShowClaudeNotification ||
             showClaudeSettingsCheckbox?.isSelected != settings.shouldShowClaudeSettingsNotification ||
+            autoSendWebSocketCheckbox?.isSelected != settings.autoSendWebSocketMessage ||
+            copyToClipboardCheckbox?.isSelected != settings.copyToClipboard ||
             useDefaultDockerImageCheckbox?.isSelected != settings.useDefaultDockerImage) {
             LOG.info("Basic settings are modified")
             return true
@@ -284,6 +299,8 @@ class MCPConfigurable : Configurable {
         settings.shouldShowNodeNotification = showNodeCheckbox?.isSelected ?: true
         settings.shouldShowClaudeNotification = showClaudeCheckbox?.isSelected ?: true
         settings.shouldShowClaudeSettingsNotification = showClaudeSettingsCheckbox?.isSelected ?: true
+        settings.autoSendWebSocketMessage = autoSendWebSocketCheckbox?.isSelected ?: false
+        settings.copyToClipboard = copyToClipboardCheckbox?.isSelected ?: true
         settings.useDefaultDockerImage = useDefaultDockerImageCheckbox?.isSelected ?: true
         
         // Only save custom docker image if not using default
@@ -309,6 +326,8 @@ class MCPConfigurable : Configurable {
         showNodeCheckbox?.isSelected = settings.shouldShowNodeNotification
         showClaudeCheckbox?.isSelected = settings.shouldShowClaudeNotification
         showClaudeSettingsCheckbox?.isSelected = settings.shouldShowClaudeSettingsNotification
+        autoSendWebSocketCheckbox?.isSelected = settings.autoSendWebSocketMessage
+        copyToClipboardCheckbox?.isSelected = settings.copyToClipboard
         useDefaultDockerImageCheckbox?.isSelected = settings.useDefaultDockerImage
         
         // Set the Docker image field
