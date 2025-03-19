@@ -45,6 +45,7 @@
         
         <!-- Settings service and configurable -->
         <applicationService serviceImplementation="org.jetbrains.mcpserverplugin.settings.PluginSettings"/>
+        <applicationService serviceImplementation="org.jetbrains.mcpserverplugin.actions.ui.LLMTodoDialogSettings"/>
         <applicationConfigurable
             parentId="tools"
             id="org.jetbrains.mcpserverplugin.settings.MCPConfigurable"

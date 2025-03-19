@@ -35,18 +35,18 @@ class AddFileToLLMAction : AnAction(), DumbAware {
             return
         }
         
-        // Show dialog to get user input
-        val dialog = LLMTodoDialog(project)
+        // Show dialog to get user input with selected files
+        val dialog = LLMTodoDialog(project, selectedFiles = selectedFiles, includeCode = false)
         if (dialog.showAndGet()) {
             val userInput = dialog.getUserInput()
             
-            // Process selected files
-            val fileContents = buildFileContents(selectedFiles, project)
+            // Process selected files - only include file paths without content
+            val fileContents = buildFileContents(selectedFiles, project, includeContent = false)
             
-            // Create the todo content as HTML by default
-            val todoContent = LLMTodoContentCreator.createHtmlTodoContent(
+            // Create the todo content 
+            val todoContent = LLMTodoContentCreator.createTodoContent(
                 elementInfo = buildElementInfo(fileContents),
-                surroundingCode = buildSurroundingCode(fileContents),
+                surroundingCode = "", // Don't include code
                 userInput = userInput,
                 project = project
             )
@@ -75,7 +75,12 @@ class AddFileToLLMAction : AnAction(), DumbAware {
         e.presentation.isEnabledAndVisible = project != null
     }
     
-    private fun buildFileContents(files: Array<VirtualFile>, project: Project): List<FileContent> {
+    private fun buildFileContents(
+        files: Array<VirtualFile>, 
+        project: Project, 
+        maxLines: Int = 50, 
+        includeContent: Boolean = true
+    ): List<FileContent> {
         val result = mutableListOf<FileContent>()
         val projectRootPath = project.basePath
         
@@ -91,6 +96,9 @@ class AddFileToLLMAction : AnAction(), DumbAware {
             if (file.isDirectory) {
                 // For directories, we include a summary but not their content
                 result.add(FileContent(relativePath, "Directory", isDirectory = true))
+            } else if (!includeContent) {
+                // If we're only including file paths, add with empty content
+                result.add(FileContent(relativePath, ""))
             } else {
                 try {
                     // For regular files, include their content if they're not too large
@@ -98,8 +106,8 @@ class AddFileToLLMAction : AnAction(), DumbAware {
                         result.add(FileContent(relativePath, "File too large to include", isTooLarge = true))
                     } else {
                         val content = String(file.contentsToByteArray())
-                        // Limit to first 50 lines
-                        val limitedContent = content.lines().take(50).joinToString("\n")
+                        // Limit to specified number of lines
+                        val limitedContent = content.lines().take(maxLines).joinToString("\n")
                         result.add(FileContent(relativePath, limitedContent))
                     }
                 } catch (e: Exception) {

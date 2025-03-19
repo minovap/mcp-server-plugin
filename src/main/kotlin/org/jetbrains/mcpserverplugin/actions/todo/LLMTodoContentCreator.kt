@@ -34,11 +34,20 @@ object LLMTodoContentCreator {
         // Get the template from .llm/prompt-context.md file or use default
         val template = getPromptTemplate(project)
         
+        // Build the context section, including code if provided
+        val contextContent = if (surroundingCode.isNotEmpty()) {
+            // Include the element info followed by a code block with the selected code
+            "$elementInfo\n\nSelected code:\n```\n$surroundingCode\n```"
+        } else {
+            // Just include the element info without code
+            elementInfo
+        }
+        
         // Replace placeholders with actual content
         return template
             .replace("{{TASK}}", userInput.trim())
-            .replace("{{CONTEXT}}", elementInfo)
-            .replace("{{CODE}}", surroundingCode)
+            .replace("{{CONTEXT}}", contextContent)
+            .replace("{{CODE}}", "") // Empty string for backward compatibility
     }
     
     /**
@@ -226,9 +235,5 @@ Please analyze the code element referenced below and complete this task:
 
 # Context
 {{CONTEXT}}
-
-```
-{{CODE}}
-```
     """
 }

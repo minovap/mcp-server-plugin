@@ -36,17 +36,29 @@ class AddToLLMTodoAction : AnAction() {
             return
         }
         
+        // Check if there's an actual text selection
+        val hasTextSelection = CodeElementFinder.hasTextSelection(editor)
+        
         // Show dialog to get user input
-        val dialog = LLMTodoDialog(project)
+        val dialog = LLMTodoDialog(project, selectedElement, file, editor, includeCode = hasTextSelection)
         if (dialog.showAndGet()) {
             val userInput = dialog.getUserInput()
             
-            // Get element info and surrounding code for the todo
+            // Get element info for the todo
             val elementInfo = ElementInfoBuilder.getElementInfo(selectedElement, file)
-            val surroundingCode = ElementInfoBuilder.getSurroundingCode(selectedElement, file, editor, 50)
             
-            // Create the todo content as HTML by default
-            val todoContent = LLMTodoContentCreator.createHtmlTodoContent(elementInfo, surroundingCode, userInput, project)
+            // If text is selected, use only the selected text as the code context
+            // Otherwise, don't include any code
+            val surroundingCode = if (hasTextSelection) {
+                // Get only the selected text
+                CodeElementFinder.getSelectedText(editor) ?: ""
+            } else {
+                // If no text is selected, don't include code
+                ""
+            }
+            
+            // Create the todo content
+            val todoContent = LLMTodoContentCreator.createTodoContent(elementInfo, surroundingCode, userInput, project)
             
             // Get plugin settings
             val settings = service<PluginSettings>()

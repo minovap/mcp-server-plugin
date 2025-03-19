@@ -56,7 +56,7 @@ class MCPConfigurable : Configurable {
         // Create Reset button for Docker image
         val resetDockerButton = JButton("Reset to Default")
         resetDockerButton.addActionListener {
-            dockerImageField?.text = DEFAULT_DOCKER_IMAGE
+            dockerImageField?.text = DockerDefaults.DEFAULT_IMAGE
         }
         
         // Create Use Default Docker Image checkbox
@@ -305,7 +305,7 @@ class MCPConfigurable : Configurable {
         
         // Only save custom docker image if not using default
         if (!settings.useDefaultDockerImage) {
-            settings.dockerImage = dockerImageField?.text ?: DEFAULT_DOCKER_IMAGE
+            settings.dockerImage = dockerImageField?.text ?: DockerDefaults.DEFAULT_IMAGE
         }
 
         // Apply tool enablement settings
@@ -344,7 +344,10 @@ class MCPConfigurable : Configurable {
     }
 
     companion object {
-        const val DEFAULT_DOCKER_IMAGE = "gitpod/workspace-full"
+        // Use the default image from DockerDefaults
+        // This was moved to DockerDefaults to avoid circular references
+        @Deprecated("Use DockerDefaults.DEFAULT_IMAGE instead", replaceWith = ReplaceWith("DockerDefaults.DEFAULT_IMAGE"))
+        const val DEFAULT_DOCKER_IMAGE = DockerDefaults.DEFAULT_IMAGE
     }
 }
 

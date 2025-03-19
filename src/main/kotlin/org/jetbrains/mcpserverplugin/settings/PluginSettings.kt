@@ -7,7 +7,6 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.util.xmlb.XmlSerializerUtil
 import org.jetbrains.mcpserverplugin.tools.docker.DockerDefaults
-import org.jetbrains.mcpserverplugin.settings.MCPConfigurable.Companion.DEFAULT_DOCKER_IMAGE
 
 /**
  * Persistent settings for the MCP Server plugin.
@@ -24,7 +23,7 @@ class PluginSettings : PersistentStateComponent<PluginSettings> {
     var shouldShowNodeNotification: Boolean = true
     var shouldShowClaudeNotification: Boolean = true
     var shouldShowClaudeSettingsNotification: Boolean = true
-    var dockerImage: String = DEFAULT_DOCKER_IMAGE
+    var dockerImage: String = DockerDefaults.DEFAULT_IMAGE
     var useDefaultDockerImage: Boolean = true
     
     // LLM action settings

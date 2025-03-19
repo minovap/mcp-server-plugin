@@ -34,6 +34,24 @@ object CodeElementFinder {
     }
     
     /**
+     * Checks if there is a text selection in the editor
+     */
+    fun hasTextSelection(editor: Editor): Boolean {
+        return editor.selectionModel.hasSelection()
+    }
+    
+    /**
+     * Gets the selected text from the editor if there is a selection
+     */
+    fun getSelectedText(editor: Editor): String? {
+        return if (editor.selectionModel.hasSelection()) {
+            editor.selectionModel.selectedText
+        } else {
+            null
+        }
+    }
+    
+    /**
      * Finds a meaningful parent element (method, class, etc.)
      */
     @Suppress("UNCHECKED_CAST")
