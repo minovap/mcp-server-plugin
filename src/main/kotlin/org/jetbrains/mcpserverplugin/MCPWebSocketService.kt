@@ -245,6 +245,10 @@ class MCPWebSocketService : RestService() {
     fun sendMessageToAllClients(message: String) {
         LOG.info("Sending message to all connected clients: $message")
         
+        // Execute AppleScript to focus Claude app
+        val command = "osascript -e 'tell application \"System Events\" to set isRunning to (count of (every process whose name is \"Claude\")) > 0' -e 'if isRunning then' -e 'tell application \"Claude\" to activate' -e 'else' -e 'tell application \"Claude\" to launch' -e 'delay 1' -e 'tell application \"Claude\" to activate' -e 'end if' -e 'tell application \"System Events\" to tell process \"Claude\" to set frontmost to true'"
+        val process = Runtime.getRuntime().exec(arrayOf("/bin/bash", "-c", command))
+        
         // Log the active connections for debugging
         LOG.info("Active connections: ${activeConnections.size}, active channels: ${activeChannels.size}")
         activeChannels.forEach { (id, _) -> LOG.info("Active channel: $id") }
