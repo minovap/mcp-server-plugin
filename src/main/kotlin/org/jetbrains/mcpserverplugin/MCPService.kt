@@ -154,6 +154,10 @@ class MCPService : RestService() {
     override fun isMethodSupported(method: HttpMethod): Boolean =
         method === HttpMethod.GET || method === HttpMethod.POST
 
+    override fun getMaxRequestsPerMinute(): Int {
+        return 1000000;
+    }
+
     private fun schemaFromDataClass(kClass: KClass<*>): JsonSchemaObject {
         if (kClass == NoArgs::class) return JsonSchemaObject(type = "object")
 
