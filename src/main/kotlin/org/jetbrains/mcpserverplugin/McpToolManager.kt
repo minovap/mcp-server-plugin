@@ -64,6 +64,7 @@ class McpToolManager {
             DeleteFileTool(),
             CopyFileTool(),
             MoveFileTool(),
+            GetProjectFilesTree(),
             
             // Official tools
             ClaudeCodeGlobTool(),
