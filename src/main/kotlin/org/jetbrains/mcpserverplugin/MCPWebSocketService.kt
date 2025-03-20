@@ -25,6 +25,8 @@ class MCPWebSocketService : RestService() {
     private val json = Json { 
         prettyPrint = true
         ignoreUnknownKeys = true
+        // Make sure all fields are serialized, even if they have default values
+        encodeDefaults = true
     }
     
     companion object {
@@ -103,12 +105,21 @@ class MCPWebSocketService : RestService() {
             handshaker.handshake(ctx.channel(), req).addListener(ChannelFutureListener { future ->
                 if (future.isSuccess) {
                     LOG.info("WebSocket connection established: $channelId from ${ctx.channel().remoteAddress()}")
-                    // Send a welcome message after connection
+                    // Get the IDE info explicitly
+                    val ideInfo = getIdeInfo()
+                    LOG.info("Including IDE info in welcome message: $ideInfo")
+                    
+                    // Send a welcome message after connection with IDE info
                     val welcome = EchoResponse(
                         message = "Connected to MCP WebSocket Server",
-                        timestamp = System.currentTimeMillis()
+                        timestamp = System.currentTimeMillis(),
+                        clientId = channelId,
+                        clientAddress = ctx.channel().remoteAddress().toString(),
+                        ideInfo = ideInfo  // Explicitly set the IDE info
                     )
-                    ctx.writeAndFlush(TextWebSocketFrame(json.encodeToString(welcome)))
+                    val welcomeJson = json.encodeToString(welcome)
+                    LOG.info("Sending welcome message: $welcomeJson")
+                    ctx.writeAndFlush(TextWebSocketFrame(welcomeJson))
                     
                     // Log connection status after successful handshake
                     LOG.info("Active connections after handshake: ${activeConnections.size}, channels: ${activeChannels.size}")
@@ -181,12 +192,28 @@ class MCPWebSocketService : RestService() {
         LOG.info("Processing WebSocket message: $text")
         
         try {
+            // Check if this is a specific request for IDE information
+            if (text.contains("get-ide-info") || text.contains("getIdeInfo")) {
+                // Send a detailed IDE info response
+                val ideInfoResponse = mapOf(
+                    "type" to "ide-info",
+                    "timestamp" to System.currentTimeMillis(),
+                    "ideInfo" to getIdeInfo()
+                )
+                val jsonResponse = json.encodeToString(ideInfoResponse)
+                LOG.info("Sending IDE info response")
+                ctx.writeAndFlush(TextWebSocketFrame(jsonResponse))
+                return
+            }
+            
             // Create a response with more details for debugging
+            val ideInfo = getIdeInfo()
             val response = EchoResponse(
                 message = "Echo: $text",
                 timestamp = System.currentTimeMillis(),
                 clientId = ctx.channel().id().asLongText(),
-                clientAddress = ctx.channel().remoteAddress().toString()
+                clientAddress = ctx.channel().remoteAddress().toString(),
+                ideInfo = ideInfo  // Explicitly set IDE info
             )
             
             val jsonResponse = json.encodeToString(response)
@@ -310,8 +337,20 @@ data class EchoResponse(
     val timestamp: Long,
     val clientId: String? = null,
     val clientAddress: String? = null,
-    val serverInfo: String = "IntelliJ MCP WebSocket Server"
+    val serverInfo: String = "IntelliJ MCP WebSocket Server",
+    val ideInfo: Map<String, String> = getIdeInfo()
 )
+
+/**
+ * Get information about the current IDE
+ * Only returns the product name to avoid showing unnecessary details
+ */
+fun getIdeInfo(): Map<String, String> {
+    val applicationInfo = com.intellij.openapi.application.ApplicationInfo.getInstance()
+    return mapOf(
+        "productName" to applicationInfo.fullApplicationName
+    )
+}
 
 /**
  * WebSocket message for new chat content from LLM tool
