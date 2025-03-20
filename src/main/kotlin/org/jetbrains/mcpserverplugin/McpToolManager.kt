@@ -2,7 +2,6 @@ package org.jetbrains.mcpserverplugin
 
 import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.components.service
-import org.jetbrains.mcpserverplugin.git.GetVcsStatusTool
 import org.jetbrains.mcpserverplugin.settings.PluginSettings
 import org.jetbrains.mcpserverplugin.tools.*
 
@@ -62,50 +61,18 @@ class McpToolManager {
 
         private fun getBuiltInTools(): List<AbstractMcpTool<*>> = listOf(
             // Custom tools
-            GetProjectRootPathTool(),
             DeleteFileTool(),
             CopyFileTool(),
             MoveFileTool(),
-            GetFileStructureTool(),
-            GetProjectFilesTree(),
-            ReplaceFileFunctionTool(),
-            ReplaceFilePartTextTool(),
-            GetFilePartTextTool(),
-            SafeTerminalCommandExecute(),
             
             // Official tools
-            GetCurrentFileTextTool(),
-            GetCurrentFilePathTool(),
-            GetSelectedTextTool(),
-            ReplaceSelectedTextTool(),
-            ReplaceCurrentFileTextTool(),
-            CreateNewFileWithTextTool(),
-            FindFilesByNameSubstring(),
-            GetFileTextByPathTool(),
-            GetVcsStatusTool(),
-            ToggleBreakpointTool(),
-            GetBreakpointsTool(),
-            ReplaceTextByPathTool(),
-            ListFilesInFolderTool(),
-            SearchInFilesContentTool(),
-            RunConfigurationTool(),
-            GetRunConfigurationsTool(),
-            GetProjectModulesTool(),
-            GetProjectDependenciesTool(),
             ClaudeCodeGlobTool(),
             ClaudeCodeGrepTool(),
             ClaudeCodeLsTool(),
             ClaudeCodeViewTool(),
             ClaudeCodeEditTool(),
             ClaudeCodeReplaceTool(),
-            ClaudeCodeBashTool(),
-            GetAllOpenFileTextsTool(),
-            GetAllOpenFilePathsTool(),
-            OpenFileInEditorTool(),
-            ListAvailableActionsTool(),
-            ExecuteActionByIdTool(),
-            GetProgressIndicatorsTool(),
-            WaitTool(),
+            ClaudeCodeBashTool()
         )
     }
 }
