@@ -57,6 +57,19 @@
     </extensions>
     
     <actions>
+        <!-- LLM group under Tools menu -->
+        <group id="org.jetbrains.mcpserverplugin.actions.LLMGroup" 
+               text="LLM"
+               popup="true">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            
+            <action id="org.jetbrains.mcpserverplugin.actions.Connect"
+                    class="org.jetbrains.mcpserverplugin.actions.ConnectAction"
+                    text="Connect"
+                    description="Connect to MCP server"
+                    icon="org.jetbrains.mcpserverplugin.icons.ClaudeIcons.CLAUDE_ICON"/>
+        </group>
+        
         <!-- Add to LLM Todo action -->
         <action id="org.jetbrains.mcpserverplugin.actions.AddToLLMTodo" 
                 class="org.jetbrains.mcpserverplugin.actions.AddToLLMTodoAction"
