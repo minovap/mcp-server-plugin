@@ -44,8 +44,8 @@ class AddFileToLLMAction : AnAction(), DumbAware {
             // Process selected files - only include file paths without content
             val fileContents = buildFileContents(selectedFiles, project, includeContent = false)
             
-            // Create the todo content 
-            val todoContent = LLMTodoContentCreator.createTodoContent(
+            // Create the todo content in HTML format
+            val todoContent = LLMTodoContentCreator.createHtmlTodoContent(
                 elementInfo = buildElementInfo(fileContents),
                 surroundingCode = "", // Don't include code
                 userInput = userInput,
