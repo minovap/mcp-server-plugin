@@ -4,44 +4,75 @@ setInterval(() => {
     if (btn) btn.click();
 }, 250);
 
-// Create a WebSocket connection
-const socket = new WebSocket('ws://localhost:63342/api/mcpws');
+// WebSocket connection manager
+let socket;
+let reconnectAttempt = 0;
+const maxReconnectAttempts = 10;
+const baseReconnectDelay = 1000; // Start with 1 second delay
 
-// Connection opened event
-socket.addEventListener('open', function (event) {
-  console.log('Connected to the WebSocket server');
-});
+function connectWebSocket() {
+    // Create a WebSocket connection
+    socket = new WebSocket('ws://localhost:63342/api/mcpws');
 
-// Connection opened event
-socket.addEventListener('close', function (event) {
-  console.log('Closed');
-});
+    // Connection opened event
+    socket.addEventListener('open', function (event) {
+        console.log('Connected to the WebSocket server');
+        reconnectAttempt = 0; // Reset reconnect counter on successful connection
+    });
 
-// Connection opened event
-socket.addEventListener('error', function (error) {
-  console.log('WS Error', error);
-});
+    // Connection closed event
+    socket.addEventListener('close', function (event) {
+        console.log('Connection closed');
+        attemptReconnect();
+    });
 
-// Listen for messages
-socket.addEventListener('message', function (event) {
-  try {
-    const data = JSON.parse(event.data);
+    // Connection error event
+    socket.addEventListener('error', function (error) {
+        console.log('WS Error', error);
+        // No need to attempt reconnect here as the close event will fire
+    });
 
-    // Format different message types
-    if (data.type === 'new-chat') {
-      console.log(`Starting new chat: ${data.content}`, 'color: blue; font-weight: bold');
-  	  document.querySelector('a[href="/new"].flex').click();
-        setTimeout(() => {
-            document.querySelector('.ProseMirror').innerHTML = data.content;
+    // Listen for messages
+    socket.addEventListener('message', function (event) {
+        try {
+            const data = JSON.parse(event.data);
 
-            setTimeout(() => {
-              document.querySelector('button[aria-label="Send Message"]').click();
-            }, 1000);
-        }, 1000);
-    } else {
-      console.log('Message received:', data);
+            // Format different message types
+            if (data.type === 'new-chat') {
+                console.log(`Starting new chat: ${data.content}`, 'color: blue; font-weight: bold');
+                document.querySelector('a[href="/new"].flex').click();
+                setTimeout(() => {
+                    document.querySelector('.ProseMirror').innerHTML = data.content;
+
+                    setTimeout(() => {
+                        document.querySelector('button[aria-label="Send Message"]').click();
+                    }, 1000);
+                }, 1000);
+            } else {
+                console.log('Message received:', data);
+            }
+        } catch (e) {
+            console.log('Text message received:', event.data);
+        }
+    });
+}
+
+function attemptReconnect() {
+    if (reconnectAttempt >= maxReconnectAttempts) {
+        console.log('Maximum reconnection attempts reached');
+        return;
     }
-  } catch (e) {
-    console.log('Text message received:', event.data);
-  }
-});
+
+    // Calculate delay with exponential backoff (1s, 2s, 4s, 8s, etc.)
+    const delay = baseReconnectDelay * Math.pow(2, reconnectAttempt);
+
+    console.log(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempt + 1}/${maxReconnectAttempts})`);
+
+    setTimeout(() => {
+        reconnectAttempt++;
+        connectWebSocket();
+    }, delay);
+}
+
+// Initial connection
+connectWebSocket();
