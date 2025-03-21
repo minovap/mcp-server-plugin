@@ -65,13 +65,13 @@ class McpToolManager {
             CopyFileTool(),
             MoveFileTool(),
             GetProjectFilesTree(),
+            EditBlocksTool(),
             
             // Official tools
             ClaudeCodeGlobTool(),
             ClaudeCodeGrepTool(),
             ClaudeCodeLsTool(),
             ClaudeCodeViewTool(),
-            ClaudeCodeEditTool(),
             ClaudeCodeReplaceTool(),
             ClaudeCodeBashTool()
         )
