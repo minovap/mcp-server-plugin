@@ -68,6 +68,22 @@
                     text="Connect"
                     description="Connect to MCP server"
                     icon="org.jetbrains.mcpserverplugin.icons.ClaudeIcons.CLAUDE_ICON"/>
+                    
+            <action id="org.jetbrains.mcpserverplugin.actions.FindFile"
+                    class="org.jetbrains.mcpserverplugin.actions.FindFileAction"
+                    text="Find File Test"
+                    description="Test the FileFinderUtils.findFileInProject functionality"/>
+                    
+            <action id="org.jetbrains.mcpserverplugin.actions.FindDirectory"
+                    class="org.jetbrains.mcpserverplugin.actions.FindDirectoryAction"
+                    text="Find Directory Test"
+                    description="Test the FileFinderUtils.findDirectoryInProject functionality"/>
+                    
+            <action id="org.jetbrains.mcpserverplugin.actions.InstallPlugin"
+                    class="org.jetbrains.mcpserverplugin.actions.InstallPluginAction"
+                    text="Install Plugin and Restart"
+                    description="Install the latest built plugin and restart the IDE"
+                    icon="AllIcons.Actions.Install"/>
         </group>
         
         <!-- Add to LLM Todo action -->
