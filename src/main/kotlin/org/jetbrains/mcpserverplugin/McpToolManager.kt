@@ -66,6 +66,7 @@ class McpToolManager {
             MoveFileTool(),
             GetProjectFilesTree(),
             EditBlocksTool(),
+            AskUserTool(),
             
             // Official tools
             ClaudeCodeGlobTool(),
