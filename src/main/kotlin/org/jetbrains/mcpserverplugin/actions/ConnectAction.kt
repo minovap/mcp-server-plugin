@@ -7,10 +7,26 @@ import javax.swing.Icon
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.Presentation
 import com.intellij.openapi.actionSystem.ActionUpdateThread
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 
 class ConnectAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         // Execute AppleScript to focus Claude app
+        // Read JS file into memory
+        val resource = ConnectAction::class.java.classLoader.getResource("js/claude-console.js") ?: throw IllegalStateException("JS file not found")
+        val jsContent = resource.readText()
+        // JS content already read from resources
+        
+        // Save current clipboard content and set new content using java.awt.Toolkit
+
+        val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+        val savedClipboard = clipboard.getData(java.awt.datatransfer.DataFlavor.stringFlavor) as? String ?: ""
+        
+        // Set clipboard to JS content
+        val stringSelection = StringSelection(jsContent)
+        clipboard.setContents(stringSelection, null)
+        
         val osascript = """
 if application "Claude" is not running then
 	tell application "Claude" to activate
@@ -59,9 +75,18 @@ repeat until fileWindowsClosed or ((current date) - fileLoopStartTime) > maxWait
 end repeat
 
 
-delay 0.2
-tell application "System Events" to keystroke "r" using {command down}
-delay 1
+delay 1.5
+
+
+-- Clipboard is already set from Kotlin
+
+tell application "System Events"
+	keystroke "v" using {command down} -- Paste from clipboard
+	key code 36 -- Press Return
+end tell
+
+
+delay 1.5
 
 -- Second loop: Wait for and close "Developer Tools - https" windows
 set httpWindowsClosed to false
@@ -99,6 +124,10 @@ log "Script completed"
         }.let { "osascript \\\n$it" }
 
         Runtime.getRuntime().exec(arrayOf("/bin/bash", "-c", command))
+        
+        // Restore original clipboard content
+        val restoreClipboardSelection = StringSelection(savedClipboard)
+        clipboard.setContents(restoreClipboardSelection, null)
     }
 
     override fun update(e: AnActionEvent) {
