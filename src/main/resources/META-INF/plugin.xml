@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <idea-plugin>
     <id>com.intellij.mcpServer</id>
-    <n>MCP Server</n>
+    <name>MCP Server</name>
     <version>1.0.16</version>
     <description><![CDATA[
     MCP (Model Context Protocol) Server for IntelliJ IDEs
@@ -86,84 +86,21 @@
                     icon="AllIcons.Actions.Install"/>
         </group>
         
-        <!-- New Chat Context Groups -->
-        <group id="org.jetbrains.mcpserverplugin.actions.EditorNewChatGroup" 
+        <!-- Prompt Context Group for editor -->
+        <group id="org.jetbrains.mcpserverplugin.actions.PromptContextGroup"
                class="org.jetbrains.mcpserverplugin.actions.PromptContextGroup"
                popup="true">
+            <!-- Add to editor context menu -->
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+            <!-- Add to code popup menu (ALT+ENTER or intention bulb) -->
             <add-to-group group-id="GenerateGroup" anchor="first"/>
-            
-            <!-- Default action when clicking directly on the group -->
-            <action id="org.jetbrains.mcpserverplugin.actions.EditorNewChatDefault"
-                    class="org.jetbrains.mcpserverplugin.actions.SendCodeToClaudeAction"
-                    text="Default"
-                    description="Use default template with editor selection" />
         </group>
-        
-        <group id="org.jetbrains.mcpserverplugin.actions.FileNewChatGroup"
+        <!-- Prompt Context Group for project view -->
+        <group id="org.jetbrains.mcpserverplugin.actions.FilePromptContextGroup"
                class="org.jetbrains.mcpserverplugin.actions.FilePromptContextGroup"
                popup="true">
+            <!-- Project view popup menu (right-click in project sidebar) -->
             <add-to-group group-id="ProjectViewPopupMenu" anchor="first" />
-            
-            <!-- Default action when clicking directly on the group -->
-            <action id="org.jetbrains.mcpserverplugin.actions.FileNewChatDefault"
-                    class="org.jetbrains.mcpserverplugin.actions.SendFilesToClaudeAction"
-                    text="Default"
-                    description="Use default template with selected files" />
         </group>
-        
-        <!-- Add divider after New Chat groups -->
-        <separator>
-            <add-to-group group-id="EditorPopupMenu" anchor="after" relative-to-action="org.jetbrains.mcpserverplugin.actions.EditorNewChatGroup"/>
-            <add-to-group group-id="GenerateGroup" anchor="after" relative-to-action="org.jetbrains.mcpserverplugin.actions.EditorNewChatGroup"/>
-            <add-to-group group-id="ProjectViewPopupMenu" anchor="after" relative-to-action="org.jetbrains.mcpserverplugin.actions.FileNewChatGroup" />
-        </separator>
-        
-        <!-- Append Context Groups -->
-        <group id="org.jetbrains.mcpserverplugin.actions.EditorAppendGroup" 
-               class="org.jetbrains.mcpserverplugin.actions.PromptContextGroup$Append"
-               popup="true">
-            <add-to-group group-id="EditorPopupMenu" anchor="after" relative-to-action="org.jetbrains.mcpserverplugin.actions.EditorNewChatGroup"/>
-            <add-to-group group-id="GenerateGroup" anchor="after" relative-to-action="org.jetbrains.mcpserverplugin.actions.EditorNewChatGroup"/>
-            
-            <!-- Default action when clicking directly on the group -->
-            <action id="org.jetbrains.mcpserverplugin.actions.EditorAppendDefault"
-                    class="org.jetbrains.mcpserverplugin.actions.SendCodeToClaudeAction"
-                    text="Default"
-                    description="Use default template with editor selection">
-                <konstruktor>
-                    <param value="org.jetbrains.mcpserverplugin.actions.EditorAppendDefault"/>
-                    <param value="Default"/>
-                    <param value="default"/>
-                    <param value="false"/>
-                </konstruktor>
-            </action>
-        </group>
-        
-        <group id="org.jetbrains.mcpserverplugin.actions.FileAppendGroup"
-               class="org.jetbrains.mcpserverplugin.actions.FilePromptContextGroup$Append"
-               popup="true">
-            <add-to-group group-id="ProjectViewPopupMenu" anchor="after" relative-to-action="org.jetbrains.mcpserverplugin.actions.FileNewChatGroup" />
-            
-            <!-- Default action when clicking directly on the group -->
-            <action id="org.jetbrains.mcpserverplugin.actions.FileAppendDefault"
-                    class="org.jetbrains.mcpserverplugin.actions.SendFilesToClaudeAction"
-                    text="Default"
-                    description="Use default template with selected files">
-                <konstruktor>
-                    <param value="org.jetbrains.mcpserverplugin.actions.FileAppendDefault"/>
-                    <param value="Default"/>
-                    <param value="default"/>
-                    <param value="false"/>
-                </konstruktor>
-            </action>
-        </group>
-        
-        <!-- Add divider after Append groups -->
-        <separator>
-            <add-to-group group-id="EditorPopupMenu" anchor="after" relative-to-action="org.jetbrains.mcpserverplugin.actions.EditorAppendGroup"/>
-            <add-to-group group-id="GenerateGroup" anchor="after" relative-to-action="org.jetbrains.mcpserverplugin.actions.EditorAppendGroup"/>
-            <add-to-group group-id="ProjectViewPopupMenu" anchor="after" relative-to-action="org.jetbrains.mcpserverplugin.actions.FileAppendGroup" />
-        </separator>
     </actions>
 </idea-plugin>

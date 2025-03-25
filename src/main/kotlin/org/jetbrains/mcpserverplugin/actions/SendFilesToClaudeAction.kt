@@ -123,7 +123,7 @@ class SendFilesToClaudeAction(
     }
     
     companion object {
-        const val MAX_FILE_SIZE = 1024 * 1024 // 1MB max file size
+        private const val MAX_FILE_SIZE = 1024 * 1024 // 1MB max file size
     }
     
     data class FileContent(

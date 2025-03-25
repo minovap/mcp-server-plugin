@@ -16,10 +16,9 @@ import org.jetbrains.mcpserverplugin.actions.SendCodeToClaudeAction
  * Action group that provides a submenu of all available prompt-contexts for editor selections
  * Can be configured to either start a new chat or append to an existing chat
  */
-open class PromptContextGroup(
+class PromptContextGroup(
     private val isNewChat: Boolean = true
 ) : DefaultActionGroup(), DumbAware, MainMenuPresentationAware {
-    
     init {
         // Set the icon in the template presentation
         templatePresentation.icon = ClaudeIcons.CLAUDE_ICON
@@ -42,6 +41,7 @@ open class PromptContextGroup(
         return true
     }
 
+
     override fun getChildren(e: AnActionEvent?): Array<AnAction> {
         val project = e?.project ?: return emptyArray()
         return getPromptContextsActions(project)
@@ -59,9 +59,4 @@ open class PromptContextGroup(
             existingAction ?: SendCodeToClaudeAction(actionId, displayName, templateName, isNewChat)
         }.toTypedArray()
     }
-    
-    /**
-     * Subclass for creating an "Append" action group
-     */
-    class Append : PromptContextGroup(false)
 }

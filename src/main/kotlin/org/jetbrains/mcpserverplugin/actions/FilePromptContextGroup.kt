@@ -16,7 +16,7 @@ import org.jetbrains.mcpserverplugin.actions.SendFilesToClaudeAction
  * Action group that provides a submenu of all available prompt-contexts for files/directories
  * Can be configured to either start a new chat or append to an existing chat
  */
-open class FilePromptContextGroup(
+class FilePromptContextGroup(
     private val isNewChat: Boolean = true
 ) : DefaultActionGroup(), DumbAware, MainMenuPresentationAware {
     init {
@@ -58,9 +58,4 @@ open class FilePromptContextGroup(
             existingAction ?: SendFilesToClaudeAction(actionId, displayName, templateName, isNewChat)
         }.toTypedArray()
     }
-    
-    /**
-     * Subclass for creating an "Append" action group
-     */
-    class Append : FilePromptContextGroup(false)
 }
