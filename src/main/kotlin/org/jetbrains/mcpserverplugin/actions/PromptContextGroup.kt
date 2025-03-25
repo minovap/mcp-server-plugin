@@ -17,14 +17,16 @@ import org.jetbrains.mcpserverplugin.actions.SendCodeToClaudeAction
  * Action group that provides a submenu of all available prompt-contexts for editor selections
  * Can be configured to either start a new chat or append to an existing chat
  */
-class PromptContextGroup(
-    private val isNewChat: Boolean = true
-) : DefaultActionGroup(), DumbAware, MainMenuPresentationAware {
+class PromptContextGroup : DefaultActionGroup(), DumbAware, MainMenuPresentationAware {
+    private val isNewChat: Boolean
+        get() = templatePresentation.text == "New Chat"
+
     init {
         // Set the icon in the template presentation
         templatePresentation.icon = ClaudeIcons.CLAUDE_ICON
-        templatePresentation.text = if (isNewChat) "New Chat" else "Append"
+        // Text is set in plugin.xml, don't override it here
         templatePresentation.isPopupGroup = true
+        // templatePresentation.text is "New Chat" or "Append"
     }
 
     override fun update(e: AnActionEvent) {
@@ -35,9 +37,7 @@ class PromptContextGroup(
         e.presentation.isEnabledAndVisible = project != null && connectionManager.isConnected()
         e.presentation.icon = ClaudeIcons.CLAUDE_ICON
 
-        if (project != null) {
-            e.presentation.text = if (isNewChat) "New Chat" else "Append"
-        }
+        // e.presentation.text is "New Chat" or "Append"
     }
 
     // This method from MainMenuPresentationAware is the key to showing the icon in popup menus

@@ -17,13 +17,15 @@ import org.jetbrains.mcpserverplugin.actions.SendFilesToClaudeAction
  * Action group that provides a submenu of all available prompt-contexts for files/directories
  * Can be configured to either start a new chat or append to an existing chat
  */
-class FilePromptContextGroup(
-    private val isNewChat: Boolean = true
-) : DefaultActionGroup(), DumbAware, MainMenuPresentationAware {
+class FilePromptContextGroup : DefaultActionGroup(), DumbAware, MainMenuPresentationAware {
+    // Determine if this is a new chat based on the text in the templatePresentation
+    private val isNewChat: Boolean
+        get() = templatePresentation.text == "New Chat"
+        
     init {
         // Set the icon in the template presentation
         templatePresentation.icon = ClaudeIcons.CLAUDE_ICON
-        templatePresentation.text = if (isNewChat) "New Chat" else "Append"
+        // Text is set in plugin.xml, don't override it here
         templatePresentation.isPopupGroup = true
     }
 
@@ -35,9 +37,7 @@ class FilePromptContextGroup(
         e.presentation.isEnabledAndVisible = project != null && connectionManager.isConnected()
         e.presentation.icon = ClaudeIcons.CLAUDE_ICON
 
-        if (project != null) {
-            e.presentation.text = if (isNewChat) "New Chat" else "Append"
-        }
+        // Don't override text from plugin.xml
     }
 
     // This method from MainMenuPresentationAware is the key to showing the icon in popup menus

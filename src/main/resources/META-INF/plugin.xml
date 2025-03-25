@@ -58,6 +58,40 @@
     </extensions>
     
     <actions>
+        <!-- Claude Append Context Group for editor -->
+        <group id="org.jetbrains.mcpserverplugin.actions.ClaudeAppendContextGroup"
+               class="org.jetbrains.mcpserverplugin.actions.PromptContextGroup"
+               text="Append"
+               popup="true">
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+            <add-to-group group-id="GenerateGroup" anchor="first"/>
+        </group>
+
+        <!-- Claude New Chat Context Group for editor -->
+        <group id="org.jetbrains.mcpserverplugin.actions.ClaudeNewChatContextGroup"
+               class="org.jetbrains.mcpserverplugin.actions.PromptContextGroup"
+               text="New Chat"
+               popup="true">
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+            <add-to-group group-id="GenerateGroup" anchor="first"/>
+        </group>
+
+        <!-- Claude Append Context Group for project view -->
+        <group id="org.jetbrains.mcpserverplugin.actions.ClaudeAppendFileContextGroup"
+               class="org.jetbrains.mcpserverplugin.actions.FilePromptContextGroup"
+               text="Append"
+               popup="true">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="first"/>
+        </group>
+        
+        <!-- Claude New Chat Context Group for project view -->
+        <group id="org.jetbrains.mcpserverplugin.actions.ClaudeNewChatFileContextGroup"
+               class="org.jetbrains.mcpserverplugin.actions.FilePromptContextGroup"
+               text="New Chat"
+               popup="true">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="first"/>
+        </group>
+
         <!-- LLM group under Tools menu -->
         <group id="org.jetbrains.mcpserverplugin.actions.LLMGroup" 
                text="LLM"
@@ -87,33 +121,18 @@
                     icon="AllIcons.Actions.Install"/>
         </group>
         
-        <!-- Prompt Context Group for editor -->
-        <group id="org.jetbrains.mcpserverplugin.actions.PromptContextGroup"
-               class="org.jetbrains.mcpserverplugin.actions.PromptContextGroup"
-               popup="true">
-            <!-- Add to editor context menu -->
-            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
-            <!-- Add to code popup menu (ALT+ENTER or intention bulb) -->
-            <add-to-group group-id="GenerateGroup" anchor="first"/>
-        </group>
-        
+        <!-- Remove original groups as they're being replaced by the new more specific ones -->
+
         <!-- Connect action for context menus when disconnected -->
         <action id="org.jetbrains.mcpserverplugin.actions.ConnectInContext"
-               class="org.jetbrains.mcpserverplugin.actions.ConnectInContextAction"
-               text="Connect to Claude"
-               description="Connect to Claude">
+                class="org.jetbrains.mcpserverplugin.actions.ConnectInContextAction"
+                text="Connect to Claude"
+                description="Connect to Claude">
             <!-- Add to editor context menu -->
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
             <!-- Add to code popup menu (ALT+ENTER or intention bulb) -->
             <add-to-group group-id="GenerateGroup" anchor="first"/>
         </action>
-        <!-- Prompt Context Group for project view -->
-        <group id="org.jetbrains.mcpserverplugin.actions.FilePromptContextGroup"
-               class="org.jetbrains.mcpserverplugin.actions.FilePromptContextGroup"
-               popup="true">
-            <!-- Project view popup menu (right-click in project sidebar) -->
-            <add-to-group group-id="ProjectViewPopupMenu" anchor="first" />
-        </group>
         
         <!-- Connect action for project view when disconnected -->
         <action id="org.jetbrains.mcpserverplugin.actions.ConnectInContextForFiles"

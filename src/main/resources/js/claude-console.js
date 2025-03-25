@@ -639,6 +639,26 @@ class WebSocketManager {
                     }, 1000);
                 }
             }
+        } else if (data.type === 'append') {
+            // Append to current chat without starting a new one
+            if (this.running) {
+                const editor = document.querySelector('.ProseMirror');
+                if (editor) {
+                    editor.innerHTML = data.content;
+                    
+                    // Send the message
+                    if (this.running) {
+                        this.timers['append-chat-send'] = setTimeout(() => {
+                            if (!this.running) return; // Skip if stopped
+                            
+                            const sendButton = document.querySelector('button[aria-label="Send Message"]');
+                            if (sendButton) {
+                                sendButton.click();
+                            }
+                        }, 1000);
+                    }
+                }
+            }
         }
     }
 
