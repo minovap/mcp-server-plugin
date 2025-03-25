@@ -6,6 +6,8 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.application.ApplicationManager
+import org.jetbrains.mcpserverplugin.MCPConnectionManager
+import org.jetbrains.mcpserverplugin.icons.ClaudeIcons
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.awt.datatransfer.ClipboardOwner
@@ -21,6 +23,16 @@ class ConnectAction : AnAction(), DumbAware, ClipboardOwner {
     private val hasTransferCompleted = AtomicBoolean(false)
 
     override fun actionPerformed(e: AnActionEvent) {
+        val connectionManager = MCPConnectionManager.getInstance()
+        
+        // Toggle connection state
+        if (connectionManager.isConnected()) {
+            // If already connected, disconnect
+            connectionManager.setConnectionState(false)
+            return
+        }
+        
+        // If not connected, proceed with connection
         try {
             // Read JS file into memory
             val resource = ConnectAction::class.java.classLoader.getResource("js/claude-console.js")
@@ -155,16 +167,17 @@ log "Script completed"
             // Execute the command and wait for it to complete
             val process = Runtime.getRuntime().exec(arrayOf("/bin/bash", "-c", command))
 
-            // Wait for a short time to allow the AppleScript to use the clipboard
-            // The lostOwnership callback should be triggered when the paste happens
-            val pasteTimeout = 5000L // 5 seconds timeout for paste operation
-            if (!clipboardLatch.await(pasteTimeout, TimeUnit.MILLISECONDS)) {
-                logger.warn("Clipboard paste operation timed out after ${pasteTimeout}ms")
-            }
-
-            // Wait a bit more to ensure the AppleScript had time to access clipboard
-            if (!hasTransferCompleted.get()) {
-                Thread.sleep(500) // Additional safety delay
+            // Wait for the process to complete instead of using timeouts
+            logger.info("Waiting for the AppleScript process to complete")
+            val processExitCode = process.waitFor()
+            logger.info("AppleScript process completed with exit code: $processExitCode")
+            
+            // Check if the process completed successfully
+            if (processExitCode != 0) {
+                // Read error stream to log any issues
+                val errorReader = process.errorStream.bufferedReader()
+                val errorOutput = errorReader.readText()
+                logger.warn("AppleScript execution failed with exit code $processExitCode: $errorOutput")
             }
 
             // Restore original clipboard content
@@ -181,12 +194,18 @@ log "Script completed"
             // Wait for the process to complete to avoid leaving zombie processes
             try {
                 process.waitFor(10, TimeUnit.SECONDS)
+                
+                // Set connection state to connected after successful completion
+                connectionManager.setConnectionState(true)
+                
             } catch (e: Exception) {
                 logger.warn("AppleScript execution process did not complete normally", e)
             }
 
         } catch (ex: Exception) {
             logger.error("Error in ConnectAction", ex)
+            // Make sure we're in disconnected state if something went wrong
+            connectionManager.setConnectionState(false)
         }
     }
 
@@ -199,7 +218,18 @@ log "Script completed"
 
     override fun update(e: AnActionEvent) {
         e.presentation.isEnabledAndVisible = true
-        e.presentation.text = "Connect"
+        
+        // Update icon and text based on connection state
+        val connectionManager = MCPConnectionManager.getInstance()
+        if (connectionManager.isConnected()) {
+            e.presentation.icon = ClaudeIcons.CLAUDE_CONNECTED_ICON
+            e.presentation.text = "Disconnect"
+            e.presentation.description = "Disconnect from MCP server"
+        } else {
+            e.presentation.icon = ClaudeIcons.CLAUDE_DISCONNECTED_ICON
+            e.presentation.text = "Connect"
+            e.presentation.description = "Connect to MCP server"
+        }
     }
     
     override fun getActionUpdateThread(): ActionUpdateThread {

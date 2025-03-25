@@ -80,7 +80,8 @@ class ClaudePromptProcessor {
                 """.trimIndent()
                 
                 // Send to all clients
-                MCPWebSocketService.getInstance().sendMessageToAllClients(jsonMessage)
+                // Always focus Claude app for user actions
+                MCPWebSocketService.getInstance().sendMessageToAllClients(jsonMessage, focusClaudeApp = true)
             } catch (e: Exception) {
                 // Log error but don't block user flow
                 println("Error sending message to WebSocket clients: ${e.message}")

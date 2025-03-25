@@ -46,6 +46,7 @@
         <!-- Settings service and configurable -->
         <applicationService serviceImplementation="org.jetbrains.mcpserverplugin.settings.PluginSettings"/>
         <applicationService serviceImplementation="org.jetbrains.mcpserverplugin.actions.ui.LLMTodoDialogSettings"/>
+        <applicationService serviceImplementation="org.jetbrains.mcpserverplugin.MCPConnectionManager" preload="true"/>
         <applicationConfigurable
             parentId="tools"
             id="org.jetbrains.mcpserverplugin.settings.MCPConfigurable"
@@ -67,7 +68,7 @@
                     class="org.jetbrains.mcpserverplugin.actions.ConnectAction"
                     text="Connect"
                     description="Connect to MCP server"
-                    icon="org.jetbrains.mcpserverplugin.icons.ClaudeIcons.CLAUDE_ICON"/>
+                    icon="org.jetbrains.mcpserverplugin.icons.ClaudeIcons.CLAUDE_DISCONNECTED_ICON"/>
                     
             <action id="org.jetbrains.mcpserverplugin.actions.FindFile"
                     class="org.jetbrains.mcpserverplugin.actions.FindFileAction"
@@ -95,6 +96,17 @@
             <!-- Add to code popup menu (ALT+ENTER or intention bulb) -->
             <add-to-group group-id="GenerateGroup" anchor="first"/>
         </group>
+        
+        <!-- Connect action for context menus when disconnected -->
+        <action id="org.jetbrains.mcpserverplugin.actions.ConnectInContext"
+               class="org.jetbrains.mcpserverplugin.actions.ConnectInContextAction"
+               text="Connect to Claude"
+               description="Connect to Claude">
+            <!-- Add to editor context menu -->
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+            <!-- Add to code popup menu (ALT+ENTER or intention bulb) -->
+            <add-to-group group-id="GenerateGroup" anchor="first"/>
+        </action>
         <!-- Prompt Context Group for project view -->
         <group id="org.jetbrains.mcpserverplugin.actions.FilePromptContextGroup"
                class="org.jetbrains.mcpserverplugin.actions.FilePromptContextGroup"
@@ -102,5 +114,14 @@
             <!-- Project view popup menu (right-click in project sidebar) -->
             <add-to-group group-id="ProjectViewPopupMenu" anchor="first" />
         </group>
+        
+        <!-- Connect action for project view when disconnected -->
+        <action id="org.jetbrains.mcpserverplugin.actions.ConnectInContextForFiles"
+               class="org.jetbrains.mcpserverplugin.actions.ConnectInContextAction"
+               text="Connect to Claude"
+               description="Connect to Claude">
+            <!-- Add to project view context menu -->
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="first" />
+        </action>
     </actions>
 </idea-plugin>

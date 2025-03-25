@@ -577,6 +577,36 @@ class WebSocketManager {
     handleMessage(data, port) {
         // Skip if manager was stopped
         if (!this.running) return;
+        
+        // Handle heartbeat messages
+        if (data.type === 'heartbeat') {
+            // Respond to heartbeat
+            const response = {
+                type: 'heartbeat-response',
+                timestamp: Date.now(),
+                original: data.timestamp
+            };
+            
+            // Send response to the port that sent the heartbeat
+            const wsKey = `ws-${port}`;
+            if (this.sockets[wsKey] && this.sockets[wsKey].socket && 
+                this.sockets[wsKey].socket.readyState === WebSocket.OPEN) {
+                console.log(`Sending heartbeat response to port ${port}`); 
+                this.sockets[wsKey].socket.send(JSON.stringify(response));
+                
+                // Add visual indicator that heartbeat was received
+                if (this.indicator) {
+                    // Flash the indicator briefly
+                    const origColor = this.indicator.style.backgroundColor;
+                    this.indicator.style.backgroundColor = '#ffcc00'; // Yellow flash
+                    setTimeout(() => {
+                        this.indicator.style.backgroundColor = origColor;
+                    }, 300);
+                }
+            }
+            
+            return;
+        }
 
         // Handle different message types based on type field
         if (data.type === 'new-chat') {

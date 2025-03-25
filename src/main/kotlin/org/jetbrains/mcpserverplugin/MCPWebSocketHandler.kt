@@ -35,11 +35,26 @@ class WebSocketFrameHandler : SimpleChannelInboundHandler<WebSocketFrame>() {
     
     override fun channelActive(ctx: ChannelHandlerContext) {
         log.info("Channel active: ${ctx.channel().id().asLongText()} from ${ctx.channel().remoteAddress()}")
+        
+        // Update connection manager to indicate we have an active connection
+        MCPConnectionManager.getInstance().setConnectionState(true)
+        
         super.channelActive(ctx)
     }
     
     override fun channelInactive(ctx: ChannelHandlerContext) {
         log.info("Channel inactive: ${ctx.channel().id().asLongText()}")
+        
+        // Check if there are any remaining active connections
+        val activeConnectionCount = service.getActiveConnectionCount()
+        if (activeConnectionCount <= 1) { // Using 1 since this connection is still counted
+            // If no connections are left, set state to disconnected
+            log.info("Last channel becoming inactive, setting connection state to disconnected")
+            MCPConnectionManager.getInstance().setConnectionState(false)
+        } else {
+            log.info("Channel inactive but still have ${activeConnectionCount-1} active connections")
+        }
+        
         super.channelInactive(ctx)
     }
     

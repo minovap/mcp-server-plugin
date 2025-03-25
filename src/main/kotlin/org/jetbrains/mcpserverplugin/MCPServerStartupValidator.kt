@@ -135,6 +135,21 @@ internal class MCPServerStartupValidator : ProjectActivity {
     }
 
     override suspend fun execute(project: Project) {
+        // Check if there are any active WebSocket connections already
+        try {
+            val webSocketService = MCPWebSocketService.getInstance()
+            val activeConnections = webSocketService.getActiveConnectionCount()
+            
+            if (activeConnections > 0) {
+                logger.info("Found $activeConnections active WebSocket connections at startup, setting connected state")
+                MCPConnectionManager.getInstance().setConnectionState(true)
+            } else {
+                logger.info("No active WebSocket connections found at startup")
+            }
+        } catch (e: Exception) {
+            logger.error("Error checking WebSocket connections at startup", e)
+        }
+        
         val notificationGroup = NotificationGroupManager.getInstance().getNotificationGroup(GROUP_ID)
         val settingsService = service<PluginSettings>()
         if (SystemInfo.isLinux) {

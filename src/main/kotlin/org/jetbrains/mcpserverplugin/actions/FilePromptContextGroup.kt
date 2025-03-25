@@ -2,6 +2,7 @@ package org.jetbrains.mcpserverplugin.actions
 
 import com.intellij.icons.AllIcons
 import org.jetbrains.mcpserverplugin.icons.ClaudeIcons
+import org.jetbrains.mcpserverplugin.MCPConnectionManager
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
@@ -28,7 +29,10 @@ class FilePromptContextGroup(
 
     override fun update(e: AnActionEvent) {
         val project = e.project
-        e.presentation.isEnabledAndVisible = project != null
+        val connectionManager = MCPConnectionManager.getInstance()
+        
+        // Only show if connected to Claude and project is available
+        e.presentation.isEnabledAndVisible = project != null && connectionManager.isConnected()
         e.presentation.icon = ClaudeIcons.CLAUDE_ICON
 
         if (project != null) {

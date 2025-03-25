@@ -7,6 +7,12 @@ object ClaudeIcons {
     val CLAUDE_ICON = IconLoader.getIcon("/icons/claude-icon.svg", ClaudeIcons::class.java)
     
     @JvmField
+    val CLAUDE_CONNECTED_ICON = IconLoader.getIcon("/icons/claude-connected-icon.svg", ClaudeIcons::class.java)
+    
+    @JvmField
+    val CLAUDE_DISCONNECTED_ICON = IconLoader.getIcon("/icons/claude-disconnected-icon.svg", ClaudeIcons::class.java)
+    
+    @JvmField
     val EXAMPLE_ICON = IconLoader.getIcon("/icons/actions/example-icon.svg", ClaudeIcons::class.java)
     
     @JvmField

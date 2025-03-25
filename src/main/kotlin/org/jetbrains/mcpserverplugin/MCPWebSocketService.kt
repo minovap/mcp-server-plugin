@@ -109,6 +109,9 @@ class MCPWebSocketService : RestService() {
                     val ideInfo = getIdeInfo()
                     LOG.info("Including IDE info in welcome message: $ideInfo")
                     
+                    // Update connection state in the manager
+                    MCPConnectionManager.getInstance().setConnectionState(true)
+                    
                     // Send a welcome message after connection with IDE info
                     val welcome = EchoResponse(
                         message = "Connected to MCP WebSocket Server",
@@ -161,6 +164,12 @@ class MCPWebSocketService : RestService() {
                 activeConnections.remove(channelId)
                 activeChannels.remove(channelId)
                 LOG.info("WebSocket connection closed: $channelId")
+                
+                // Check if we have any active connections left
+                if (activeChannels.isEmpty()) {
+                    LOG.info("No active connections left, updating connection state")
+                    MCPConnectionManager.getInstance().setConnectionState(false)
+                }
             }
             is PingWebSocketFrame -> {
                 LOG.info("Received PING frame from $channelId, sending PONG")
@@ -192,6 +201,13 @@ class MCPWebSocketService : RestService() {
         LOG.info("Processing WebSocket message: $text")
         
         try {
+            // Check for heartbeat response
+            if (text.contains("\"type\":\"heartbeat-response\"")) {
+                // Update the last heartbeat time in the connection manager
+                MCPConnectionManager.getInstance().updateHeartbeat()
+                return
+            }
+            
             // Check if this is a specific request for IDE information
             if (text.contains("get-ide-info") || text.contains("getIdeInfo")) {
                 // Send a detailed IDE info response
@@ -268,13 +284,19 @@ class MCPWebSocketService : RestService() {
     
     /**
      * Sends a message to all connected WebSocket clients
+     * 
+     * @param message The message to send
+     * @param focusClaudeApp Whether to focus the Claude app (default: false)
      */
-    fun sendMessageToAllClients(message: String) {
-        LOG.info("Sending message to all connected clients: $message")
+    fun sendMessageToAllClients(message: String, focusClaudeApp: Boolean = false) {
+        LOG.info("Sending message to all connected clients: $message, focus Claude: $focusClaudeApp")
         
-        // Execute AppleScript to focus Claude app
-        val command = "osascript -e 'tell application \"System Events\" to set isRunning to (count of (every process whose name is \"Claude\")) > 0' -e 'if isRunning then' -e 'tell application \"Claude\" to activate' -e 'else' -e 'tell application \"Claude\" to launch' -e 'delay 1' -e 'tell application \"Claude\" to activate' -e 'end if' -e 'tell application \"System Events\" to tell process \"Claude\" to set frontmost to true'"
-        val process = Runtime.getRuntime().exec(arrayOf("/bin/bash", "-c", command))
+        // Only focus Claude app if explicitly requested
+        if (focusClaudeApp) {
+            // Execute AppleScript to focus Claude app
+            val command = "osascript -e 'tell application \"System Events\" to set isRunning to (count of (every process whose name is \"Claude\")) > 0' -e 'if isRunning then' -e 'tell application \"Claude\" to activate' -e 'else' -e 'tell application \"Claude\" to launch' -e 'delay 1' -e 'tell application \"Claude\" to activate' -e 'end if' -e 'tell application \"System Events\" to tell process \"Claude\" to set frontmost to true'"
+            Runtime.getRuntime().exec(arrayOf("/bin/bash", "-c", command))
+        }
         
         // Log the active connections for debugging
         LOG.info("Active connections: ${activeConnections.size}, active channels: ${activeChannels.size}")
@@ -287,16 +309,44 @@ class MCPWebSocketService : RestService() {
         
         val channelsCopy = HashMap(activeChannels) // Create a copy to avoid concurrent modification
         
+        var sendFailures = 0
         channelsCopy.forEach { (channelId, ctx) ->
             try {
                 LOG.info("Sending message to client: $channelId")
+                
+                // Check if channel is still open and writable
+                if (!ctx.channel().isOpen || !ctx.channel().isWritable) {
+                    throw Exception("Channel is not open or writable")
+                }
+                
                 ctx.writeAndFlush(TextWebSocketFrame(message))
+                    .addListener { future ->
+                        if (!future.isSuccess) {
+                            LOG.error("Failed to send message to client: $channelId", future.cause())
+                            // Remove the channel if the send failed
+                            activeChannels.remove(channelId)
+                            activeConnections.remove(channelId)
+                            
+                            // If all sends failed, update connection state
+                            if (activeChannels.isEmpty()) {
+                                LOG.warn("All channels have failed, setting connection state to disconnected")
+                                MCPConnectionManager.getInstance().setConnectionState(false)
+                            }
+                        }
+                    }
             } catch (e: Exception) {
+                sendFailures++
                 LOG.error("Error sending message to client: $channelId", e)
                 // Remove the channel if it's no longer valid
                 activeChannels.remove(channelId)
                 activeConnections.remove(channelId)
             }
+        }
+        
+        // If all sends failed and we had channels to begin with, update the connection state
+        if (sendFailures > 0 && sendFailures == channelsCopy.size) {
+            LOG.warn("All message sends failed, setting connection state to disconnected")
+            MCPConnectionManager.getInstance().setConnectionState(false)
         }
     }
     
@@ -325,6 +375,61 @@ class MCPWebSocketService : RestService() {
                 activeConnections.remove(lastEntry.key)
             }
         }
+    }
+    
+    /**
+     * Gets the current count of active WebSocket connections
+     */
+    fun getActiveConnectionCount(): Int {
+        return activeChannels.size
+    }
+    
+    /**
+     * Gets a copy of the active channels map for connection validation
+     */
+    fun getActiveChannels(): Map<String, ChannelHandlerContext> {
+        return HashMap(activeChannels)
+    }
+    
+    /**
+     * Removes a channel that has been detected as inactive
+     */
+    fun removeChannel(channelId: String) {
+        LOG.info("Removing inactive channel: $channelId")
+        activeChannels.remove(channelId)
+        activeConnections.remove(channelId)
+    }
+    
+    /**
+     * Validate all channels and remove any that are closed/broken
+     * @return The number of valid channels remaining
+     */
+    fun validateAllChannels(): Int {
+        val channelsCopy = HashMap(activeChannels) // Create a copy to avoid concurrent modification
+        var validChannels = 0
+        
+        channelsCopy.forEach { (channelId, ctx) ->
+            try {
+                val channel = ctx.channel()
+                if (!channel.isOpen || !channel.isActive || !channel.isWritable) {
+                    LOG.warn("Channel $channelId is not valid (open=${channel.isOpen}, active=${channel.isActive}, writable=${channel.isWritable})")
+                    removeChannel(channelId)
+                } else {
+                    validChannels++
+                }
+            } catch (e: Exception) {
+                LOG.error("Exception checking channel $channelId: ${e.message}")
+                removeChannel(channelId)
+            }
+        }
+        
+        // Update connection status if no valid channels remain
+        if (validChannels == 0 && channelsCopy.isNotEmpty()) {
+            LOG.warn("No valid channels remain after validation")
+            MCPConnectionManager.getInstance().setConnectionState(false)
+        }
+        
+        return validChannels
     }
 }
 
