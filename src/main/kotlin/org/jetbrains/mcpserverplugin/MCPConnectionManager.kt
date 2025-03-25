@@ -18,41 +18,16 @@ class MCPConnectionManager : Disposable {
         // Singleton instance
         @JvmStatic
         fun getInstance(): MCPConnectionManager = ApplicationManager.getApplication().getService(MCPConnectionManager::class.java)
-        
-        // Heartbeat interval in seconds
-        private const val HEARTBEAT_INTERVAL = 5L
-        
-        // Heartbeat timeout in seconds - make this much longer to be more forgiving
-        private const val HEARTBEAT_TIMEOUT = 30L
     }
 
     // Connection state
     private var isConnected = false
-    
-    // Timestamp of last received heartbeat
-    private var lastHeartbeatTime = System.currentTimeMillis()
 
     // Listeners for connection state changes
     private val listeners = mutableListOf<(Boolean) -> Unit>()
     
     init {
-        // Schedule periodic heartbeat sending
-        executor.scheduleAtFixedRate(
-            { sendHeartbeat() },
-            HEARTBEAT_INTERVAL,
-            HEARTBEAT_INTERVAL,
-            TimeUnit.SECONDS
-        )
-        
-        // Schedule periodic heartbeat check
-        executor.scheduleAtFixedRate(
-            { checkHeartbeat() },
-            HEARTBEAT_TIMEOUT,
-            HEARTBEAT_TIMEOUT / 2,
-            TimeUnit.SECONDS
-        )
-        
-        // Schedule more frequent validation of channels
+        // Schedule WebSocket ping validation at regular intervals
         executor.scheduleAtFixedRate(
             { validateConnection() },
             5,  // Start after 5 seconds
@@ -60,7 +35,7 @@ class MCPConnectionManager : Disposable {
             TimeUnit.SECONDS
         )
         
-        log.info("Started heartbeat with interval: $HEARTBEAT_INTERVAL seconds, timeout: $HEARTBEAT_TIMEOUT seconds")
+        log.info("Started WebSocket connection validation with interval: 3 seconds")
     }
 
     /**
@@ -70,12 +45,6 @@ class MCPConnectionManager : Disposable {
         if (isConnected != connected) {
             log.info("Connection state changed from $isConnected to $connected")
             isConnected = connected
-            
-            if (connected) {
-                // Reset heartbeat timer when connecting
-                updateHeartbeat()
-            }
-            
             notifyListeners()
         }
     }
@@ -85,123 +54,58 @@ class MCPConnectionManager : Disposable {
      */
     fun isConnected(): Boolean = isConnected
     
-    /**
-     * Send a heartbeat message to all connected clients
-     */
-    fun sendHeartbeat() {
-        try {
-            if (isConnected) {
-                val service = MCPWebSocketService.getInstance()
-                val message = "{\"type\":\"heartbeat\",\"timestamp\":${System.currentTimeMillis()}}" 
-                // Don't focus Claude app for heartbeat messages
-                service.sendMessageToAllClients(message, focusClaudeApp = false)
-                log.info("Heartbeat sent")
-            }
-        } catch (e: Exception) {
-            log.error("Error sending heartbeat", e)
-            // If we can't send a heartbeat, connection might be broken
-            validateConnection()
-        }
-    }
+
     
     /**
-     * Update the last heartbeat time when a heartbeat response is received
-     */
-    fun updateHeartbeat() {
-        lastHeartbeatTime = System.currentTimeMillis()
-        log.info("Heartbeat received at $lastHeartbeatTime")
-        
-        // If we're currently disconnected, update the state
-        if (!isConnected) {
-            log.info("Received heartbeat while disconnected, setting state to connected")
-            setConnectionState(true)
-        }
-    }
-    
-    /**
-     * Explicitly validate the connection status
-     * This is a separate method from checkHeartbeat to provide more direct channel validation
+     * Explicitly validate the connection status by sending WebSocket ping frames
+     * This is more reliable than heartbeat for checking if WebSockets are still alive
      */
     private fun validateConnection() {
         if (!isConnected) {
-            // If we're already disconnected, nothing to do
+            // If we're already disconnected, check if we have active channels
+            // This allows for reconnection if the WebSocket is actually available
+            val service = MCPWebSocketService.getInstance()
+            val activeCount = service.getActiveConnectionCount()
+            
+            if (activeCount > 0) {
+                log.info("Found $activeCount active channels while disconnected, restoring connection state")
+                setConnectionState(true)
+            }
             return
         }
         
         try {
-            log.debug("Validating connection status")
+            // First check if we have any active channels
             val service = MCPWebSocketService.getInstance()
-            val validCount = service.validateAllChannels()
+            val activeCount = service.getActiveConnectionCount()
             
-            if (validCount <= 0) {
-                log.warn("Connection validation failed: No valid channels found")
+            if (activeCount <= 0) {
+                log.warn("No active WebSocket channels found, setting connection state to disconnected")
+                setConnectionState(false)
+                return
+            }
+            
+            // If we have active channels, use ping for additional validation
+            log.debug("Validating ${activeCount} active connection(s) using WebSocket ping")
+            val pingResult = service.sendPingToAllClients()
+            
+            if (!pingResult) {
+                log.warn("WebSocket ping validation failed: No successful pings")
                 // Update UI to show disconnected
                 setConnectionState(false)
             } else {
-                log.debug("Connection validation successful: $validCount valid channels")
+                log.debug("WebSocket ping validation successful")
+                // Ensure connection state is true
+                setConnectionState(true)
             }
         } catch (e: Exception) {
-            log.error("Error validating connection", e)
+            log.error("Error validating connection with ping", e)
             // If validation throws an exception, assume connection is broken
             setConnectionState(false)
         }
     }
     
-    /**
-     * Check if we've received a heartbeat recently
-     */
-    private fun checkHeartbeat() {
-        try {
-            if (isConnected) {
-                val currentTime = System.currentTimeMillis()
-                val timeSinceLastHeartbeat = currentTime - lastHeartbeatTime
-                val timeoutMillis = TimeUnit.SECONDS.toMillis(HEARTBEAT_TIMEOUT)
-                val warningThreshold = TimeUnit.SECONDS.toMillis(HEARTBEAT_INTERVAL * 3)
-                
-                // Try a heartbeat after a short delay if we haven't received one recently
-                if (timeSinceLastHeartbeat > TimeUnit.SECONDS.toMillis(HEARTBEAT_INTERVAL)) {
-                    // But only log if it's been longer than 2 intervals
-                    if (timeSinceLastHeartbeat > TimeUnit.SECONDS.toMillis(HEARTBEAT_INTERVAL * 2)) {
-                        log.info("Heartbeat check: Last heartbeat was ${timeSinceLastHeartbeat}ms ago, timeout is ${timeoutMillis}ms")
-                    }
-                    
-                    // Always try to verify the connection status by sending another heartbeat
-                    if (checkActiveChannels()) {
-                        sendHeartbeat()
-                    } else {
-                        log.warn("No active channels found during heartbeat check")
-                        setConnectionState(false)
-                        return
-                    }
-                }
-                
-                // Warning threshold - still connected but getting worried
-                if (timeSinceLastHeartbeat > warningThreshold) {
-                    log.warn("Heartbeat warning: No response for ${timeSinceLastHeartbeat}ms, status check queued")
-                    
-                    // Double-check if channels are still active
-                    if (!checkActiveChannels()) {
-                        log.warn("No active channels during warning check, disconnecting")
-                        setConnectionState(false)
-                        return
-                    }
-                }
-                
-                // If no heartbeat for HEARTBEAT_TIMEOUT seconds, consider disconnected
-                if (timeSinceLastHeartbeat > timeoutMillis) {
-                    log.warn("No heartbeat received for ${timeSinceLastHeartbeat}ms (timeout: ${timeoutMillis}ms), considering disconnected")
-                    setConnectionState(false)
-                }
-            }
-        } catch (e: Exception) {
-            log.error("Error checking heartbeat", e)
-            // If we can't even check the heartbeat, consider disconnected
-            if (isConnected) {
-                log.warn("Exception during heartbeat check, setting state to disconnected")
-                setConnectionState(false)
-            }
-        }
-    }
+
     
     /**
      * Check if channels are still active and valid

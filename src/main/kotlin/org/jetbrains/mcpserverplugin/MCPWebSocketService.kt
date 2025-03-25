@@ -201,10 +201,9 @@ class MCPWebSocketService : RestService() {
         LOG.info("Processing WebSocket message: $text")
         
         try {
-            // Check for heartbeat response
+            // No longer processing heartbeat responses
             if (text.contains("\"type\":\"heartbeat-response\"")) {
-                // Update the last heartbeat time in the connection manager
-                MCPConnectionManager.getInstance().updateHeartbeat()
+                LOG.info("Ignoring heartbeat response as heartbeat mechanism is disabled")
                 return
             }
             
@@ -430,6 +429,57 @@ class MCPWebSocketService : RestService() {
         }
         
         return validChannels
+    }
+    
+    /**
+     * Send WebSocket ping frames to all connected clients to check if connections are alive
+     * This is a more direct and reliable way to check WebSocket status than checking channel properties
+     * @return true if at least one ping was successfully sent, false otherwise
+     */
+    fun sendPingToAllClients(): Boolean {
+        LOG.info("Sending WebSocket ping frames to validate connections")
+        
+        // Log the active connections for debugging
+        LOG.info("Active connections for ping: ${activeConnections.size}, active channels: ${activeChannels.size}")
+        
+        if (activeChannels.isEmpty()) {
+            LOG.warn("No active WebSocket connections to ping")
+            return false
+        }
+        
+        val channelsCopy = HashMap(activeChannels) // Create a copy to avoid concurrent modification
+        var pingSuccess = false // Track if any ping is successful
+        
+        channelsCopy.forEach { (channelId, ctx) ->
+            try {
+                // Create a ping frame with a timestamp payload
+                val pingContent = io.netty.buffer.Unpooled.wrappedBuffer(
+                    System.currentTimeMillis().toString().toByteArray(java.nio.charset.StandardCharsets.UTF_8)
+                )
+                
+                // WebSocket specification includes PING frames to check connection
+                val pingFrame = io.netty.handler.codec.http.websocketx.PingWebSocketFrame(pingContent)
+                
+                LOG.info("Sending WebSocket PING to channel: $channelId")
+                
+                // Check if channel is still open and writable before sending
+                if (!ctx.channel().isOpen || !ctx.channel().isWritable) {
+                    throw Exception("Channel is not open or writable for ping")
+                }
+                
+                // IMPORTANT: We consider the ping successful if we can send it
+                // This avoids issues with asynchronous callbacks not completing in time
+                ctx.writeAndFlush(pingFrame)
+                pingSuccess = true // Mark success immediately if we get here
+                LOG.info("Successfully sent PING to channel: $channelId")
+            } catch (e: Exception) {
+                LOG.error("Error sending PING to channel: $channelId", e)
+                removeChannel(channelId)
+            }
+        }
+        
+        // Return true if we were able to send at least one ping
+        return pingSuccess;
     }
 }
 
