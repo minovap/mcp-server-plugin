@@ -86,26 +86,21 @@
                     icon="AllIcons.Actions.Install"/>
         </group>
         
-        <!-- Add to LLM Todo action -->
-        <action id="org.jetbrains.mcpserverplugin.actions.AddToLLMTodo" 
-                class="org.jetbrains.mcpserverplugin.actions.AddToLLMTodoAction"
-                text="Use with LLM"
-                description="Use selected code with Large Language Models">
+        <!-- Prompt Context Group for editor -->
+        <group id="org.jetbrains.mcpserverplugin.actions.PromptContextGroup"
+               class="org.jetbrains.mcpserverplugin.actions.PromptContextGroup"
+               popup="true">
             <!-- Add to editor context menu -->
-            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
             <!-- Add to code popup menu (ALT+ENTER or intention bulb) -->
-            <add-to-group group-id="GenerateGroup" anchor="last"/>
-        </action>
-        
-        <!-- Add File to LLM action for project view -->
-        <action id="org.jetbrains.mcpserverplugin.actions.AddFileToLLM"
-                class="org.jetbrains.mcpserverplugin.actions.AddFileToLLMAction"
-                text="Use with LLM..."
-                description="Use selected file/folder with Large Language Models">
+            <add-to-group group-id="GenerateGroup" anchor="first"/>
+        </group>
+        <!-- Prompt Context Group for project view -->
+        <group id="org.jetbrains.mcpserverplugin.actions.FilePromptContextGroup"
+               class="org.jetbrains.mcpserverplugin.actions.FilePromptContextGroup"
+               popup="true">
             <!-- Project view popup menu (right-click in project sidebar) -->
-            <add-to-group group-id="ProjectViewPopupMenu" anchor="last" />
-            <!-- Add ellipsis to indicate this opens a dialog -->
-            <keyboard-shortcut first-keystroke="alt shift L" keymap="$default" />
-        </action>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="first" />
+        </group>
     </actions>
 </idea-plugin>

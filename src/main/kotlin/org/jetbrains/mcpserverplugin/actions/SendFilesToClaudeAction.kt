@@ -3,14 +3,10 @@ package org.jetbrains.mcpserverplugin.actions
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.components.service
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.VirtualFile
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import org.jetbrains.mcpserverplugin.MCPWebSocketService
 import org.jetbrains.mcpserverplugin.NewChatMessage
 import org.jetbrains.mcpserverplugin.actions.todo.LLMTodoContentCreator
 import org.jetbrains.mcpserverplugin.actions.ui.LLMTodoDialog
@@ -18,10 +14,15 @@ import org.jetbrains.mcpserverplugin.settings.PluginSettings
 import java.io.File
 
 /**
- * Action that adds a file or folder content to an LLM task and copies it to clipboard
- * This action is available in the project view context menu
+ * Action that sends file or folder references to Claude
+ * This action is available in the project view context menu and sends
+ * file information to Claude via WebSocket and/or copies to clipboard
  */
-class AddFileToLLMAction : AnAction(), DumbAware {
+class SendFilesToClaudeAction(
+    private val actionId: String = "org.jetbrains.mcpserverplugin.actions.SendFilesToClaudeAction",
+    private val displayName: String = "Send Files to Claude",
+    private val preselectedTemplate: String? = null
+) : AnAction(displayName), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val selectedFiles = e.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY) ?: return
@@ -36,37 +37,21 @@ class AddFileToLLMAction : AnAction(), DumbAware {
         }
         
         // Show dialog to get user input with selected files
-        val dialog = LLMTodoDialog(project, selectedFiles = selectedFiles, includeCode = false)
-        if (dialog.showAndGet()) {
-            val userInput = dialog.getUserInput()
-            val selectedTemplate = dialog.getSelectedTemplateName()
-            
-            // Process selected files - only include file paths without content
-            val fileContents = buildFileContents(selectedFiles, project, includeContent = false)
-            
-            // Create the todo content in HTML format
-            val todoContent = LLMTodoContentCreator.createHtmlTodoContent(
-                elementInfo = buildElementInfo(fileContents),
-                surroundingCode = "", // Don't include code
-                userInput = userInput,
-                project = project,
-                templateName = selectedTemplate
-            )
-            
-            // Get plugin settings
-            val settings = service<PluginSettings>()
-            
-            // Copy to clipboard if enabled in settings
-            if (settings.copyToClipboard) {
-                LLMTodoContentCreator.copyToClipboard(todoContent)
-            }
-            
-            // Check if auto-send WebSocket message is enabled in settings
-            if (settings.autoSendWebSocketMessage) {
-                // Send the content to WebSocket clients
-                sendToWebSocketClients(todoContent)
-            }
-        }
+        val dialog = LLMTodoDialog(
+            project, 
+            selectedFiles = selectedFiles, 
+            includeCode = false,
+            preselectedTemplate = preselectedTemplate
+        )
+        
+        // Process selected files - only include file paths without content
+        val fileContents = buildFileContents(selectedFiles, project, includeContent = false)
+        
+        // Build element info
+        val elementInfo = buildElementInfo(fileContents)
+        
+        // Delegate to common handler
+        ClaudePromptProcessor.processContext(project, elementInfo, "", dialog)
     }
     
     override fun update(e: AnActionEvent) {
@@ -140,28 +125,6 @@ class AddFileToLLMAction : AnAction(), DumbAware {
     
     companion object {
         private const val MAX_FILE_SIZE = 1024 * 1024 // 1MB max file size
-        private val json = Json { prettyPrint = true }
-        
-        /**
-         * Sends the task content to all connected WebSocket clients
-         */
-        private fun sendToWebSocketClients(content: String) {
-            try {
-                // Create a simple JSON object manually to ensure proper format
-                val jsonMessage = """
-                {
-                    "type": "new-chat",
-                    "content": ${json.encodeToString(content)}
-                }
-                """.trimIndent()
-                
-                // Send to all clients
-                MCPWebSocketService.getInstance().sendMessageToAllClients(jsonMessage)
-            } catch (e: Exception) {
-                // Log error but don't block user flow
-                println("Error sending message to WebSocket clients: ${e.message}")
-            }
-        }
     }
     
     data class FileContent(

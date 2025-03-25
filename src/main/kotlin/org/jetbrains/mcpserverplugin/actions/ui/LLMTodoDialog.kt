@@ -50,7 +50,8 @@ class LLMTodoDialog(
     private val file: com.intellij.psi.PsiFile? = null,
     private val editor: com.intellij.openapi.editor.Editor? = null,
     private val selectedFiles: Array<com.intellij.openapi.vfs.VirtualFile>? = null,
-    private val includeCode: Boolean = false
+    private val includeCode: Boolean = false,
+    private val preselectedTemplate: String? = null
 ) : DialogWrapper(project) {
     private val textArea = JBTextArea(8, 50)
     
@@ -71,7 +72,7 @@ class LLMTodoDialog(
     private var actualFilePath: String? = null
     
     // File content information
-    private var selectedFileContents: List<org.jetbrains.mcpserverplugin.actions.AddFileToLLMAction.FileContent>? = null
+    private var selectedFileContents: List<org.jetbrains.mcpserverplugin.actions.SendFilesToClaudeAction.FileContent>? = null
     
     init {
         title = "Use with LLM"
@@ -97,7 +98,7 @@ class LLMTodoDialog(
         initPreviewEditor()
         
         // Setup template combobox
-        initTemplateComboBox()
+        initTemplateComboBox(preselectedTemplate)
         
         init()
         
@@ -124,8 +125,9 @@ class LLMTodoDialog(
     
     /**
      * Initialize the template selection combobox
+     * @param preselectedTemplate Optional template name to preselect
      */
-    private fun initTemplateComboBox() {
+    private fun initTemplateComboBox(preselectedTemplate: String? = null) {
         // Add available templates to the combobox
         val model = DefaultComboBoxModel<String>()
         
@@ -140,6 +142,15 @@ class LLMTodoDialog(
             .forEach { model.addElement(it) }
             
         templateComboBox.model = model
+        
+        // Preselect template if specified
+        if (preselectedTemplate != null) {
+            val templateDisplayName = availableTemplates.entries.find { it.value == preselectedTemplate }?.key
+            if (templateDisplayName != null) {
+                templateComboBox.selectedItem = templateDisplayName
+                selectedTemplateName = preselectedTemplate
+            }
+        }
         
         // Add listener to update preview when template changes
         templateComboBox.addItemListener { event ->
@@ -185,7 +196,7 @@ class LLMTodoDialog(
             // Case 1: Single element is selected - like in AddToLLMTodoAction
             updatePreviewForSelectedElement(userInput)
         } else if (selectedFileContents != null) {
-            // Case 2: Files are selected - like in AddFileToLLMAction
+            // Case 2: Files are selected - like in SendFilesToClaudeAction
             updatePreviewForSelectedFiles(userInput)
         } else {
             // Case 3: No selection - use example content
@@ -313,7 +324,7 @@ class LLMTodoDialog(
     /**
      * Builds element info from selected files
      */
-    private fun buildElementInfoFromFiles(fileContents: List<org.jetbrains.mcpserverplugin.actions.AddFileToLLMAction.FileContent>): String {
+    private fun buildElementInfoFromFiles(fileContents: List<org.jetbrains.mcpserverplugin.actions.SendFilesToClaudeAction.FileContent>): String {
         return fileContents.joinToString("\n") { 
             when {
                 it.isDirectory -> "Directory: ${it.path}"
@@ -327,7 +338,7 @@ class LLMTodoDialog(
      * Builds surrounding code content from selected files
      */
     private fun buildSurroundingCodeFromFiles(
-        fileContents: List<org.jetbrains.mcpserverplugin.actions.AddFileToLLMAction.FileContent>
+        fileContents: List<org.jetbrains.mcpserverplugin.actions.SendFilesToClaudeAction.FileContent>
     ): String {
         // Get all files that aren't directories or too large
         val validFiles = fileContents.filter { !it.isDirectory && !it.isTooLarge }
@@ -480,8 +491,8 @@ class LLMTodoDialog(
     /**
      * Builds file contents for preview
      */
-    private fun buildFileContentsPreview(files: Array<com.intellij.openapi.vfs.VirtualFile>): List<org.jetbrains.mcpserverplugin.actions.AddFileToLLMAction.FileContent> {
-        val result = mutableListOf<org.jetbrains.mcpserverplugin.actions.AddFileToLLMAction.FileContent>()
+    private fun buildFileContentsPreview(files: Array<com.intellij.openapi.vfs.VirtualFile>): List<org.jetbrains.mcpserverplugin.actions.SendFilesToClaudeAction.FileContent> {
+        val result = mutableListOf<org.jetbrains.mcpserverplugin.actions.SendFilesToClaudeAction.FileContent>()
         val projectRootPath = project.basePath
         
         for (file in files) {
@@ -495,20 +506,20 @@ class LLMTodoDialog(
             
             if (file.isDirectory) {
                 // For directories, we include a summary but not their content
-                result.add(org.jetbrains.mcpserverplugin.actions.AddFileToLLMAction.FileContent(relativePath, "Directory", isDirectory = true))
+                result.add(org.jetbrains.mcpserverplugin.actions.SendFilesToClaudeAction.FileContent(relativePath, "Directory", isDirectory = true))
             } else {
                 try {
                     // For regular files, include their content if they're not too large
                     if (file.length > MAX_FILE_SIZE) {
-                        result.add(org.jetbrains.mcpserverplugin.actions.AddFileToLLMAction.FileContent(relativePath, "File too large to include", isTooLarge = true))
+                        result.add(org.jetbrains.mcpserverplugin.actions.SendFilesToClaudeAction.FileContent(relativePath, "File too large to include", isTooLarge = true))
                     } else {
                         val content = String(file.contentsToByteArray())
                         // Preview with first few lines
                         val previewContent = content.lines().take(10).joinToString("\n")
-                        result.add(org.jetbrains.mcpserverplugin.actions.AddFileToLLMAction.FileContent(relativePath, previewContent))
+                        result.add(org.jetbrains.mcpserverplugin.actions.SendFilesToClaudeAction.FileContent(relativePath, previewContent))
                     }
                 } catch (e: Exception) {
-                    result.add(org.jetbrains.mcpserverplugin.actions.AddFileToLLMAction.FileContent(relativePath, "Could not read file: ${e.message}"))
+                    result.add(org.jetbrains.mcpserverplugin.actions.SendFilesToClaudeAction.FileContent(relativePath, "Could not read file: ${e.message}"))
                 }
             }
         }
