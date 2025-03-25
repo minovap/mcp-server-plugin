@@ -7,10 +7,8 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.mcpserverplugin.NewChatMessage
 import org.jetbrains.mcpserverplugin.actions.todo.LLMTodoContentCreator
 import org.jetbrains.mcpserverplugin.actions.ui.LLMTodoDialog
-import org.jetbrains.mcpserverplugin.settings.PluginSettings
 import java.io.File
 
 /**
@@ -21,7 +19,8 @@ import java.io.File
 class SendFilesToClaudeAction(
     private val actionId: String = "org.jetbrains.mcpserverplugin.actions.SendFilesToClaudeAction",
     private val displayName: String = "Send Files to Claude",
-    private val preselectedTemplate: String? = null
+    private val preselectedTemplate: String? = null,
+    private val isNewChat: Boolean = true
 ) : AnAction(displayName), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
@@ -51,7 +50,7 @@ class SendFilesToClaudeAction(
         val elementInfo = buildElementInfo(fileContents)
         
         // Delegate to common handler
-        ClaudePromptProcessor.processContext(project, elementInfo, "", dialog)
+        ClaudePromptProcessor.processContext(project, elementInfo, "", dialog, isNewChat)
     }
     
     override fun update(e: AnActionEvent) {
@@ -124,7 +123,7 @@ class SendFilesToClaudeAction(
     }
     
     companion object {
-        private const val MAX_FILE_SIZE = 1024 * 1024 // 1MB max file size
+        const val MAX_FILE_SIZE = 1024 * 1024 // 1MB max file size
     }
     
     data class FileContent(

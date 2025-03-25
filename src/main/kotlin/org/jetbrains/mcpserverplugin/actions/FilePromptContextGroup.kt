@@ -14,12 +14,15 @@ import org.jetbrains.mcpserverplugin.actions.SendFilesToClaudeAction
 
 /**
  * Action group that provides a submenu of all available prompt-contexts for files/directories
+ * Can be configured to either start a new chat or append to an existing chat
  */
-class FilePromptContextGroup : DefaultActionGroup(), DumbAware, MainMenuPresentationAware {
+open class FilePromptContextGroup(
+    private val isNewChat: Boolean = true
+) : DefaultActionGroup(), DumbAware, MainMenuPresentationAware {
     init {
         // Set the icon in the template presentation
         templatePresentation.icon = ClaudeIcons.CLAUDE_ICON
-        templatePresentation.text = "New Chat"
+        templatePresentation.text = if (isNewChat) "New Chat" else "Append"
         templatePresentation.isPopupGroup = true
     }
 
@@ -29,7 +32,7 @@ class FilePromptContextGroup : DefaultActionGroup(), DumbAware, MainMenuPresenta
         e.presentation.icon = ClaudeIcons.CLAUDE_ICON
 
         if (project != null) {
-            e.presentation.text = "New Chat"
+            e.presentation.text = if (isNewChat) "New Chat" else "Append"
         }
     }
 
@@ -46,12 +49,18 @@ class FilePromptContextGroup : DefaultActionGroup(), DumbAware, MainMenuPresenta
     private fun getPromptContextsActions(project: Project): Array<AnAction> {
         val templates = LLMTodoContentCreator.listAvailableTemplates(project)
         val actionManager = ActionManager.getInstance()
+        val actionSuffix = if (isNewChat) "NewChat" else "Append"
 
         return templates.entries.map { (displayName, templateName) ->
-            val actionId = "org.jetbrains.mcpserverplugin.actions.UseFileWithLLMTemplate_$templateName"
+            val actionId = "org.jetbrains.mcpserverplugin.actions.UseFileWithLLMTemplate_${templateName}_$actionSuffix"
             val existingAction = actionManager.getAction(actionId)
 
-            existingAction ?: SendFilesToClaudeAction(actionId, displayName, templateName)
+            existingAction ?: SendFilesToClaudeAction(actionId, displayName, templateName, isNewChat)
         }.toTypedArray()
     }
+    
+    /**
+     * Subclass for creating an "Append" action group
+     */
+    class Append : FilePromptContextGroup(false)
 }

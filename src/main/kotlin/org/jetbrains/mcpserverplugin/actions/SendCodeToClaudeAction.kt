@@ -16,7 +16,8 @@ import org.jetbrains.mcpserverplugin.actions.ui.LLMTodoDialog
 class SendCodeToClaudeAction(
     private val actionId: String = "org.jetbrains.mcpserverplugin.actions.SendCodeToClaudeAction",
     private val displayName: String = "Send Code to Claude",
-    private val preselectedTemplate: String? = null
+    private val preselectedTemplate: String? = null,
+    private val isNewChat: Boolean = true
 ) : AnAction(displayName) {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
@@ -60,7 +61,7 @@ class SendCodeToClaudeAction(
         }
         
         // Delegate to common handler
-        ClaudePromptProcessor.processContext(project, elementInfo, surroundingCode, dialog)
+        ClaudePromptProcessor.processContext(project, elementInfo, surroundingCode, dialog, isNewChat)
     }
     
     override fun update(e: AnActionEvent) {

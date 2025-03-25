@@ -24,13 +24,14 @@ class ClaudePromptProcessor {
          * @param elementInfo Information about the context (code element or file)
          * @param surroundingCode The code context or empty string
          * @param dialog The configured dialog to show
-         * @param preselectedTemplate Optional template to preselect
+         * @param isNewChat Whether to create a new chat or append to existing chat
          */
         fun processContext(
             project: Project,
             elementInfo: String,
             surroundingCode: String,
-            dialog: LLMTodoDialog
+            dialog: LLMTodoDialog,
+            isNewChat: Boolean = true
         ) {
             if (dialog.showAndGet()) {
                 val userInput = dialog.getUserInput()
@@ -56,20 +57,24 @@ class ClaudePromptProcessor {
                 // Check if auto-send WebSocket message is enabled in settings
                 if (settings.autoSendWebSocketMessage) {
                     // Send the content to WebSocket clients
-                    sendToWebSocketClients(todoContent)
+                    sendToWebSocketClients(todoContent, isNewChat)
                 }
             }
         }
         
         /**
          * Sends the task content to all connected WebSocket clients
+         * 
+         * @param content The formatted content to send
+         * @param isNewChat Whether to create a new chat or append to existing chat
          */
-        private fun sendToWebSocketClients(content: String) {
+        private fun sendToWebSocketClients(content: String, isNewChat: Boolean = true) {
             try {
                 // Create a simple JSON object manually to ensure proper format
+                val messageType = if (isNewChat) "new-chat" else "append"
                 val jsonMessage = """
                 {
-                    "type": "new-chat",
+                    "type": "$messageType",
                     "content": ${json.encodeToString(content)}
                 }
                 """.trimIndent()
