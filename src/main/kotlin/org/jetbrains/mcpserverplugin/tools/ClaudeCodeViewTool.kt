@@ -40,12 +40,12 @@ data class ViewToolArgs(
     
     /**
      * Maximum number of lines to read.
-     * If not specified, defaults to 2000 lines.
+     * If not specified, defaults to 5000 lines.
      * 
      * Examples:
-     * - null  (use default limit of 2000 lines)
+     * - null  (use default limit of 5000 lines)
      * - 10    (read up to 10 lines)
-     * - 5000  (read up to 5000 lines)
+     * - 7000  (read up to 7000 lines)
      */
     val limit: Int? = null
 )
@@ -55,7 +55,7 @@ class ClaudeCodeViewTool : AbstractMcpTool<ViewToolArgs>() {
     override val isClaudeCodeTool: Boolean = true
     override val description: String = """
         Reads a file from the local filesystem.
-        By default, it reads up to 2000 lines starting from the beginning of the file. 
+        By default, it reads up to 5000 lines starting from the beginning of the file. 
         You can optionally specify a line offset and limit (especially handy for long files), 
         but it's recommended to read the whole file by not providing these parameters. 
         Any lines longer than 2000 characters will be truncated.
