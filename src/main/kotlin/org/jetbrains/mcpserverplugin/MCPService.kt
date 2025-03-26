@@ -60,6 +60,11 @@ class MCPService : RestService() {
         ignoreUnknownKeys = true
         classDiscriminator = "schemaType"
     }
+    
+    companion object {
+        // Thread-local variable to track if a call is from the MCP tool panel
+        val mcpToolPanelContext = ThreadLocal<Boolean>()
+    }
 
     override fun getServiceName(): String = serviceName
 
@@ -98,6 +103,9 @@ class MCPService : RestService() {
         context: ChannelHandlerContext,
         project: Project
     ) {
+        // Check if this is a call from the MCP tool panel
+        val isFromToolPanel = request.headers().contains("X-MCP-Tool-Panel", "true", true)
+        
         val tool = tools.find { it.name == path } ?: run {
             sendJson(Response(error = "Unknown tool: $path"), request, context)
             return
@@ -112,7 +120,7 @@ class MCPService : RestService() {
             return
         }
         val result = try {
-            toolHandle(tool, project, args)
+            toolHandle(tool, project, args, isFromToolPanel)
         } catch (e: Throwable) {
             logger<MCPService>().warn("Failed to execute tool $path", e)
             Response(error = "Failed to execute tool $path, message ${e.message}")
@@ -146,9 +154,18 @@ class MCPService : RestService() {
         }
     }
 
-    private fun <Args : Any> toolHandle(tool: McpTool<Args>, project: Project, args: Any): Response {
-        @Suppress("UNCHECKED_CAST")
-        return tool.handle(project, args as Args)
+    private fun <Args : Any> toolHandle(tool: McpTool<Args>, project: Project, args: Any, isFromToolPanel: Boolean = false): Response {
+        // We need a way to pass the isFromToolPanel flag to the tool handle method
+        // Since we can't directly modify the handle() method signature in the interface,
+        // we'll store this in a thread-local variable that LogCollector can check
+        mcpToolPanelContext.set(isFromToolPanel)
+        try {
+            @Suppress("UNCHECKED_CAST")
+            return tool.handle(project, args as Args)
+        } finally {
+            // Clean up the thread-local to prevent memory leaks
+            mcpToolPanelContext.remove()
+        }
     }
 
     override fun isMethodSupported(method: HttpMethod): Boolean =
@@ -201,7 +218,8 @@ data class ToolInfo(
 @Serializable
 data class Response(
     val status: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val logs: List<String>? = null
 )
 
 @Serializable

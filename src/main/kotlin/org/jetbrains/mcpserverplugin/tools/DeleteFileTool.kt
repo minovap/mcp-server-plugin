@@ -7,7 +7,8 @@ import com.intellij.openapi.vfs.toNioPathOrNull
 import kotlinx.serialization.Serializable
 import org.jetbrains.ide.mcp.Response
 import org.jetbrains.mcpserverplugin.AbstractMcpTool
-import org.jetbrains.mcpserverplugin.utils.resolveRel
+import org.jetbrains.mcpserverplugin.utils.filesearch.FileSearch
+import org.jetbrains.mcpserverplugin.utils.filesearch.resolveRel
 import kotlin.io.path.deleteExisting
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
@@ -34,7 +35,8 @@ class DeleteFileTool : AbstractMcpTool<DeleteFileArgs>() {
         val projectDir = project.guessProjectDir()?.toNioPathOrNull()
             ?: return Response(error = "can't find project dir")
 
-        val path = projectDir.resolveRel(args.pathInProject)
+        val fileSearch = FileSearch()
+        val path = fileSearch.resolveRel(projectDir, args.pathInProject)
 
         return try {
             if (!path.exists()) {

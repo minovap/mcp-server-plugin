@@ -35,7 +35,7 @@ object DockerDefaults {
 /**
  * Manages Docker operations for safe terminal command execution
  */
-class DockerManager(private val projectDir: String, private val projectName: String) {
+class DockerManager(private val projectDir: String, private val projectName: String, private val logCollector: ((String) -> Unit)? = null) {
 
     // Store the Dockerfile content hash from the last build
     // This helps detect when Dockerfile content has changed
@@ -189,7 +189,7 @@ class DockerManager(private val projectDir: String, private val projectName: Str
                         LOG.info("[Docker build] ${event.text}")
                         stdoutBuffer.append(event.text)
                     } else if (outputType === ProcessOutputTypes.STDERR) {
-                        LOG.error("[Docker build error] ${event.text}")
+                        LOG.info("[Docker build stderr] ${event.text}")
                         stderrBuffer.append(event.text)
                     }
                 }
@@ -433,14 +433,7 @@ class DockerManager(private val projectDir: String, private val projectName: Str
     fun executeCommand(command: String, timeoutMs: Int = 1800000): String {
         val dockerPath = dockerPath ?: return "Docker executable not found"
 
-        // Check if tmux is available in the container
-        val tmuxAvailable = isTmuxAvailable(dockerPath, containerName)
-
-        return if (tmuxAvailable) {
-            executeTmuxCommand(dockerPath, command, timeoutMs)
-        } else {
-            executeSimpleCommand(dockerPath, command, timeoutMs)
-        }
+        return executeSimpleCommand(dockerPath, command, timeoutMs)
     }
 
     /**
@@ -486,14 +479,13 @@ class DockerManager(private val projectDir: String, private val projectName: Str
             dockerPath, "exec",
             "-w", projectDir,
             containerName,
-            "bash", "-c", command
+            "bash", "-c", "$command"
         )
         try {
             val process = ProcessBuilder(execCommand)
                 .redirectErrorStream(true)
                 .start()
                 
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
             val output = StringBuilder()
             
             // Start a timeout handler
@@ -513,10 +505,14 @@ class DockerManager(private val projectDir: String, private val projectName: Str
             timeoutThread.isDaemon = true
             timeoutThread.start()
             
-            var line: String?
+            // Read output as raw bytes to preserve all characters including spaces
+            val inputStream = process.inputStream
+            val buffer = ByteArray(4096)
+            var bytesRead: Int
+            
             try {
-                while (reader.readLine().also { line = it } != null) {
-                    output.append(line).append("\n")
+                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    output.append(String(buffer, 0, bytesRead))
                 }
                 future.complete(true)
             } catch (e: Exception) {
@@ -558,6 +554,7 @@ class DockerManager(private val projectDir: String, private val projectName: Str
      */
     private fun executeTmuxCommand(dockerPath: String, command: String, timeoutMs: Int = 1800000): String {
         LOG.info("DOCKER_TMUX_EXEC: Using tmux execution method")
+        logCollector?.invoke("DOCKER_TMUX_EXEC: Using tmux execution method")
 
         // Generate a unique output file for this command
         val outputFileId = System.currentTimeMillis().toString()
@@ -580,6 +577,7 @@ class DockerManager(private val projectDir: String, private val projectName: Str
             sessionProcess.waitFor()
         } catch (e: Exception) {
             LOG.warn("DOCKER_TMUX_ERROR: Failed to create tmux session: ${e.message}")
+            logCollector?.invoke("DOCKER_TMUX_ERROR: Failed to create tmux session: ${e.message}")
         }
 
         // before running a command send CTRL+C to cancel any input from a human tmux observer
@@ -596,6 +594,7 @@ class DockerManager(private val projectDir: String, private val projectName: Str
             Thread.sleep(200)
         } catch (e: Exception) {
             LOG.warn("DOCKER_INTERRUPT_ERROR: Failed to send interrupt: ${e.message}")
+            logCollector?.invoke("DOCKER_INTERRUPT_ERROR: Failed to send interrupt: ${e.message}")
         }
 
         // Prepare a command that will:
@@ -606,7 +605,7 @@ class DockerManager(private val projectDir: String, private val projectName: Str
             cd $projectDir && 
             clear &&
             (echo "~/# $command" && 
-            { $command; echo $? > ${outputFileName}.exit; } 2>&1) | 
+            { ($command); echo $? > ${outputFileName}.exit; } 2>&1) | 
             tee $outputFileName && 
             touch $markerFileName
         """.trimIndent().replace("\n", " ")
@@ -622,11 +621,13 @@ class DockerManager(private val projectDir: String, private val projectName: Str
 
         // Send the command to tmux
         LOG.info("DOCKER_CMD_START: Sending command to tmux")
+        logCollector?.invoke("DOCKER_CMD_START: Sending command to tmux: $wrappedCommand")
         ProcessBuilder(execCommand).start().waitFor()
 
         // Give a moment for the process to start
         Thread.sleep(100)
         LOG.info("DOCKER_CMD_WAITING: Waiting for command to complete")
+        logCollector?.invoke("DOCKER_CMD_WAITING: Waiting for command to complete")
 
         // Poll for command completion by checking for the marker file
         val maxWaitTimeMs = timeoutMs.toLong() // Use provided timeout
@@ -650,7 +651,7 @@ class DockerManager(private val projectDir: String, private val projectName: Str
                     .redirectErrorStream(true)
                     .start()
 
-                val markerCheck = checkProcess.inputStream.bufferedReader().readText().trim()
+                val markerCheck = checkProcess.inputStream.bufferedReader().readText()
                 checkProcess.waitFor()
 
                 // Check if the marker file exists
@@ -658,10 +659,12 @@ class DockerManager(private val projectDir: String, private val projectName: Str
 
                 if (isCommandComplete) {
                     LOG.info("DOCKER_CMD_COMPLETE: Command completed (marker file found)")
+                    logCollector?.invoke("DOCKER_CMD_COMPLETE: Command completed (marker file found)")
                     break
                 }
             } catch (e: Exception) {
                 LOG.warn("DOCKER_CHECK_ERROR: Error checking command status: ${e.message}")
+                logCollector?.invoke("DOCKER_CHECK_ERROR: Error checking command status: ${e.message}")
             }
 
             // Wait before polling again
@@ -671,6 +674,7 @@ class DockerManager(private val projectDir: String, private val projectName: Str
         if (!isCommandComplete) {
             // If we get here, the process didn't complete within the timeout
             LOG.warn("DOCKER_CMD_TIMEOUT: Command execution timed out after ${maxWaitTimeMs/1000} seconds")
+            logCollector?.invoke("DOCKER_CMD_TIMEOUT: Command execution timed out after ${maxWaitTimeMs/1000} seconds")
             return "[Command execution timed out after ${maxWaitTimeMs/1000} seconds]"
         }
 
@@ -686,6 +690,7 @@ class DockerManager(private val projectDir: String, private val projectName: Str
         cmdExitCodeProcess.waitFor()
 
         LOG.info("DOCKER_CMD_EXIT_CODE: Command inside container exited with code: $cmdExitCode")
+        logCollector?.invoke("DOCKER_CMD_EXIT_CODE: Command inside container exited with code: $cmdExitCode")
 
         // Read the output file
         val catCommand = listOf(
@@ -703,19 +708,25 @@ class DockerManager(private val projectDir: String, private val projectName: Str
             process.waitFor()
 
             LOG.info("DOCKER_OUTPUT_RAW_SIZE: Got ${output.length} characters of output")
+            logCollector?.invoke("DOCKER_OUTPUT_RAW_SIZE: Got ${output.length} characters of output")
 
             // Split the output by lines
             val lines = output.split("\n")
             LOG.info("DOCKER_LINES_COUNT: ${lines.size}")
+            logCollector?.invoke("DOCKER_LINES_COUNT: ${lines.size}")
 
             if (lines.isNotEmpty()) {
                 LOG.info("DOCKER_FIRST_LINE: \"${lines.firstOrNull() ?: ""}\"")
+                logCollector?.invoke("DOCKER_FIRST_LINE: \"${lines.firstOrNull() ?: ""}\"")
                 if (lines.size > 1) {
                     LOG.info("DOCKER_SECOND_LINE: \"${lines.getOrNull(1) ?: ""}\"")
+                    logCollector?.invoke("DOCKER_SECOND_LINE: \"${lines.getOrNull(1) ?: ""}\"")
                 }
                 LOG.info("DOCKER_LAST_LINE: \"${lines.lastOrNull() ?: ""}\"")
+                logCollector?.invoke("DOCKER_LAST_LINE: \"${lines.lastOrNull() ?: ""}\"")
                 if (lines.size > 1) {
                     LOG.info("DOCKER_SECOND_LAST_LINE: \"${lines.getOrElse(lines.size - 2) { "" }}\"")
+                    logCollector?.invoke("DOCKER_SECOND_LAST_LINE: \"${lines.getOrElse(lines.size - 2) { "" }}\"")
                 }
             }
 
@@ -728,6 +739,7 @@ class DockerManager(private val projectDir: String, private val projectName: Str
             }
 
             // Clean up temporary files
+            /*
             val cleanupCommand = listOf(
                 dockerPath, "exec",
                 containerName,
@@ -737,13 +749,18 @@ class DockerManager(private val projectDir: String, private val projectName: Str
 
             ProcessBuilder(cleanupCommand).start()
             LOG.info("DOCKER_CLEANUP: Removed temporary output files")
+            logCollector?.invoke("DOCKER_CLEANUP: Removed temporary output files")
+            */
+            logCollector?.invoke("DOCKER_CLEANUP NOPE: $outputFileName")
 
             val finalOutput = processedLines.joinToString("\n")
             LOG.info("DOCKER_OUTPUT_FINAL_SIZE: ${finalOutput.length}")
+            logCollector?.invoke("DOCKER_OUTPUT_FINAL_SIZE: ${finalOutput.length}")
 
             return finalOutput
         } catch (e: Exception) {
             LOG.error("DOCKER_ERROR: Error reading command output: ${e.message}", e)
+            logCollector?.invoke("DOCKER_ERROR: Error reading command output: ${e.message}")
             return "Error capturing command output: ${e.message}"
         }
     }

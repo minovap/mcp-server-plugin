@@ -7,7 +7,8 @@ import com.intellij.openapi.vfs.toNioPathOrNull
 import kotlinx.serialization.Serializable
 import org.jetbrains.ide.mcp.Response
 import org.jetbrains.mcpserverplugin.AbstractMcpTool
-import org.jetbrains.mcpserverplugin.utils.resolveRel
+import org.jetbrains.mcpserverplugin.utils.filesearch.FileSearch
+import org.jetbrains.mcpserverplugin.utils.filesearch.resolveRel
 import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 import kotlin.io.path.moveTo
@@ -33,8 +34,9 @@ class MoveFileTool : AbstractMcpTool<MoveFileArgs>() {
         val projectDir = project.guessProjectDir()?.toNioPathOrNull()
             ?: return Response(error = "can't find project dir")
 
-        val sourcePath = projectDir.resolveRel(args.sourcePath)
-        val targetPath = projectDir.resolveRel(args.targetPath)
+        val fileSearch = FileSearch()
+        val sourcePath = fileSearch.resolveRel(projectDir, args.sourcePath)
+        val targetPath = fileSearch.resolveRel(projectDir, args.targetPath)
         
         return try {
             if (!sourcePath.exists()) {

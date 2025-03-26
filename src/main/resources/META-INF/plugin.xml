@@ -47,6 +47,10 @@
         <applicationService serviceImplementation="org.jetbrains.mcpserverplugin.settings.PluginSettings"/>
         <applicationService serviceImplementation="org.jetbrains.mcpserverplugin.actions.ui.LLMTodoDialogSettings"/>
         <applicationService serviceImplementation="org.jetbrains.mcpserverplugin.MCPConnectionManager" preload="true"/>
+
+        <!-- Tool windows -->
+        <toolWindow id="MCP Tools" anchor="right" factoryClass="org.jetbrains.mcpserverplugin.toolwindow.McpToolWindowFactory" icon="AllIcons.Actions.Execute"/>
+        
         <applicationConfigurable
             parentId="tools"
             id="org.jetbrains.mcpserverplugin.settings.MCPConfigurable"
@@ -104,21 +108,13 @@
                     description="Connect to MCP server"
                     icon="org.jetbrains.mcpserverplugin.icons.ClaudeIcons.CLAUDE_DISCONNECTED_ICON"/>
                     
-            <action id="org.jetbrains.mcpserverplugin.actions.FindFile"
-                    class="org.jetbrains.mcpserverplugin.actions.FindFileAction"
-                    text="Find File Test"
-                    description="Test the FileFinderUtils.findFileInProject functionality"/>
-                    
-            <action id="org.jetbrains.mcpserverplugin.actions.FindDirectory"
-                    class="org.jetbrains.mcpserverplugin.actions.FindDirectoryAction"
-                    text="Find Directory Test"
-                    description="Test the FileFinderUtils.findDirectoryInProject functionality"/>
-                    
             <action id="org.jetbrains.mcpserverplugin.actions.InstallPlugin"
                     class="org.jetbrains.mcpserverplugin.actions.InstallPluginAction"
                     text="Install Plugin and Restart"
                     description="Install the latest built plugin and restart the IDE"
                     icon="AllIcons.Actions.Install"/>
+                    
+
         </group>
         
         <!-- Remove original groups as they're being replaced by the new more specific ones -->

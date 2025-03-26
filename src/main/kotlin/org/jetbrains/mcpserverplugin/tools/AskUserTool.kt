@@ -106,8 +106,10 @@ class AskUserTool : AbstractMcpTool<AskUserToolArgs>() {
             val panel = JPanel(BorderLayout(10, 10))
             panel.border = JBUI.Borders.empty(10)
             
-            // Create question label with some padding
-            val questionLabel = JBLabel(question)
+            // Create question label with wrapping to prevent excessively wide dialogs
+            // Using HTML with a fixed width to force text wrapping
+            val wrappedQuestion = "<html><div style='width: 450px;'>$question</div></html>"
+            val questionLabel = JBLabel(wrappedQuestion)
             questionLabel.border = JBUI.Borders.empty(0, 0, 8, 0) // Add bottom padding
             
             // Add scrollbars to the textarea

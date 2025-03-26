@@ -13,6 +13,7 @@ import org.jetbrains.mcpserverplugin.settings.PluginSettings
 import org.jetbrains.mcpserverplugin.tools.docker.DockerDefaults
 import org.jetbrains.mcpserverplugin.tools.docker.DockerManager
 import org.jetbrains.mcpserverplugin.tools.docker.DevContainerConfig
+import org.jetbrains.mcpserverplugin.utils.LogCollector
 
 // At the top of your file
 private val LOG = Logger.getInstance(ClaudeCodeBashTool::class.java)
@@ -46,19 +47,28 @@ Usage notes:
 """.trimIndent()
 
     override fun handle(project: Project, args: BashToolArgs): Response {
+        // Create a log collector for diagnostic information
+        val logCollector = LogCollector()
+        logCollector.info("Starting bash tool execution")
+        
         // Get project root directory
         val projectDir = runReadAction<String?> {
             project.guessProjectDir()?.toNioPathOrNull()?.toString()
-        } ?: return Response(error = "Could not determine project root directory")
+        } ?: return Response(error = "Could not determine project root directory", logs = logCollector.getMessages())
 
+        logCollector.info("Project directory: $projectDir")
+        
         val projectName = project.name.let {
             // Sanitize the project name for Docker container naming
             // Replace any non-alphanumeric characters with hyphens and convert to lowercase
-            it.replace(Regex("[^a-zA-Z0-9]"), "-").lowercase()
+            val sanitized = it.replace(Regex("[^a-zA-Z0-9]"), "-").lowercase()
+            logCollector.info("Sanitized project name: $sanitized")
+            sanitized
         }
 
         // Validate command
         val command = args.command
+        logCollector.info("Command to execute: $command")
         
         // Check for banned commands
         val bannedCommands = listOf(
@@ -66,78 +76,117 @@ Usage notes:
             "lynx", "w3m", "links", "httpie", "xh", "http-prompt", "chrome", 
             "firefox", "safari"
         )
+        logCollector.info("Checking for banned commands")
         
         for (bannedCmd in bannedCommands) {
             val bannedRegex = Regex("(^|\\s|;|\\||&)$bannedCmd(\\s|;|\\||&|$)")
             if (bannedRegex.containsMatchIn(command)) {
-                return Response(error = "Command '$bannedCmd' is not allowed for security reasons. Please use an alternative approach.")
+                logCollector.error("Command contains banned term: '$bannedCmd'")
+                return Response(error = "Command '$bannedCmd' is not allowed for security reasons. Please use an alternative approach.", logs = logCollector.getMessages())
             }
         }
+        logCollector.info("No banned commands found")
 
-        // Initialize Docker manager
-        val dockerManager = DockerManager(projectDir, projectName)
+        // Initialize Docker manager with a log collector function
+        logCollector.info("Initializing Docker manager")
+        // Create a log collector function that adds Docker logs to our logs collection
+        val dockerLogCollector: (String) -> Unit = { logMessage ->
+            // Add the Docker log messages to our logs list with a DOCKER: prefix
+            logCollector.info("DOCKER: $logMessage")
+        }
+        val dockerManager = DockerManager(projectDir, projectName, dockerLogCollector)
         
         // Check if Docker is available
         if (dockerManager.dockerPath == null) {
-            return Response(error = "Docker executable not found. Make sure Docker is installed and in PATH.")
+            logCollector.error("Docker executable not found")
+            return Response(error = "Docker executable not found. Make sure Docker is installed and in PATH.", logs = logCollector.getMessages())
         }
+        logCollector.info("Docker executable found at: ${dockerManager.dockerPath}")
 
         try {
+            logCollector.info("Starting Docker container operation")
+            
             // Clean up old containers (older than 24 hours)
             try {
+                logCollector.info("Cleaning up old containers")
                 dockerManager.cleanupOldContainers()
+                logCollector.info("Old containers cleanup completed")
             } catch (e: Exception) {
                 // Just log the cleanup error but continue with the main functionality
                 LOG.warn("Failed to clean up old containers: ${e.message}")
+                logCollector.warn("Failed to clean up old containers: ${e.message}")
             }
             
             // Get settings
+            logCollector.info("Getting plugin settings")
             val settings = service<PluginSettings>()
             
             // Check for devcontainer.json first
+            logCollector.info("Checking for devcontainer.json")
             val config = DevContainerConfig.fromProjectDir(projectDir)
             
             // Get the Docker image - either from settings or the default
             val defaultImage = if (settings.useDefaultDockerImage) DockerDefaults.DEFAULT_IMAGE else settings.dockerImage
             LOG.info("Image from settings: $defaultImage (useDefaultDockerImage: ${settings.useDefaultDockerImage})")
+            logCollector.info("Image from settings: $defaultImage (useDefaultDockerImage: ${settings.useDefaultDockerImage})")
             
             // Log info about found devcontainer.json config
             if (config != null) {
                 LOG.info("Found devcontainer.json - Image: ${config.image}, Dockerfile: ${config.build?.dockerfile}")
+                logCollector.info("Found devcontainer.json - Image: ${config.image}, Dockerfile: ${config.build?.dockerfile}")
+            } else {
+                logCollector.info("No devcontainer.json found, using default settings")
             }
             
             val dockerImage = dockerManager.getDockerImage(defaultImage)
             LOG.info("Final Docker image selected: $dockerImage")
+            logCollector.info("Final Docker image selected: $dockerImage")
             
             // Ensure container is running
             LOG.info("Ensuring container is running with image: $dockerImage")
+            logCollector.info("Ensuring container is running with image: $dockerImage")
             if (!dockerManager.ensureContainerIsRunning(dockerImage)) {
-                return Response(error = "Failed to start Docker container")
+                logCollector.error("Failed to start Docker container")
+                return Response(error = "Failed to start Docker container", logs = logCollector.getMessages())
             }
+            logCollector.info("Docker container is running successfully")
             
             // Execute the command with timeout if specified
             val timeout = args.timeout ?: 1800000 // Default to 30 minutes if not specified
             val limitedTimeout = minOf(timeout, 600000) // Limit to max 10 minutes (600,000 ms)
+            logCollector.info("Executing command with timeout: ${limitedTimeout}ms")
+            LOG.info("BASH_CMD_START: Executing bash command with timeout ${limitedTimeout}ms: $command")
             
+            val startTime = System.currentTimeMillis()
             val output = dockerManager.executeCommand(command, limitedTimeout)
+            val executionTime = System.currentTimeMillis() - startTime
+            LOG.info("BASH_CMD_COMPLETE: Command completed in ${executionTime}ms")
+            logCollector.info("Command executed, output length: ${output.length} characters, execution time: ${executionTime}ms")
+            LOG.info("BASH_CMD_EXECUTION_TIME: ${executionTime}ms")
             
             // Truncate output if it exceeds 30,000 characters
             val truncatedOutput = if (output.length > 30000) {
+                logCollector.info("Output exceeds 30,000 characters, truncating")
                 output.substring(0, 30000) + "\n... (output truncated, exceeds 30000 characters)"
             } else {
                 output
             }
             
-            // Format the output
+            // Format the output with BASH_ prefixed logs (similar to DOCKER_ logs)
             val formattedOutput = buildString {
                 append("bash# ${args.command}")
                 append("\n")
                 append(truncatedOutput)
             }
             
-            return Response(formattedOutput)
+            logCollector.info("Command execution completed successfully")
+            LOG.info("BASH_CMD_SUCCESS: Command execution successful with output length ${output.length} characters")
+            return Response(formattedOutput, logs = logCollector.getMessages())
         } catch (e: Exception) {
-            return Response(error = "Error executing Docker command: ${e.message}")
+            logCollector.error("Exception during Docker command execution: ${e.message}")
+            logCollector.error("${e.stackTraceToString()}")
+            LOG.error("BASH_CMD_ERROR: Exception during command execution: ${e.message}", e)
+            return Response(error = "Error executing Docker command: ${e.message}", logs = logCollector.getMessages())
         }
     }
 }

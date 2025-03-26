@@ -13,7 +13,8 @@ import com.intellij.xdebugger.impl.breakpoints.XBreakpointUtil
 import kotlinx.serialization.Serializable
 import org.jetbrains.ide.mcp.NoArgs
 import org.jetbrains.ide.mcp.Response
-import org.jetbrains.mcpserverplugin.utils.resolveRel
+import org.jetbrains.mcpserverplugin.utils.filesearch.FileSearch
+import org.jetbrains.mcpserverplugin.utils.filesearch.resolveRel
 
 @Serializable
 data class ToggleBreakpointArgs(val filePathInProject: String, val line: Int)
@@ -37,7 +38,8 @@ class ToggleBreakpointTool : AbstractMcpTool<ToggleBreakpointArgs>() {
     ): Response {
         val projectDir = project.guessProjectDir()?.toNioPathOrNull()
             ?: return Response(error = "can't find project dir")
-        val virtualFile = LocalFileSystem.getInstance().findFileByNioFile(projectDir.resolveRel(args.filePathInProject))
+        val fileSearch = FileSearch()
+        val virtualFile = LocalFileSystem.getInstance().findFileByNioFile(fileSearch.resolveRel(projectDir, args.filePathInProject))
 
         runWriteAction {
             val position = XSourcePositionImpl.create(virtualFile, args.line - 1)

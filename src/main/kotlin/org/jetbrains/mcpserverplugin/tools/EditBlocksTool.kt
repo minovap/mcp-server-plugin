@@ -8,6 +8,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jetbrains.ide.mcp.Response
 import org.jetbrains.mcpserverplugin.AbstractMcpTool
+import org.jetbrains.mcpserverplugin.utils.LogCollector
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.nio.file.StandardOpenOption
@@ -26,7 +27,8 @@ enum class EditResult {
 @Serializable
 data class SearchReplace(
     val search: String,
-    val replace: String
+    val replace: String,
+    val replaceAll: Boolean = false  // New flag to control multiple replacements
 )
 
 /**
@@ -62,9 +64,15 @@ class EditBlocksTool : AbstractMcpTool<EditBlocksToolArgs>() {
                 {"search": "another text", "replace": "another replacement"}
             ],
             "path/to/file2.txt": [
-                {"search": "old code", "replace": "new code"}
+                {"search": "old code", "replace": "new code", "replaceAll": true}
             ]
         }
+        
+        Options:
+        - search: The text to find (required)
+        - replace: The text to replace it with (required)
+        - replaceAll: Set to true to replace all occurrences of the search text. Default is false, which
+          requires the search text to appear exactly once in the file (for safety).
         
         Returns a map with the same structure where each edit is marked as "replace #[index] successful" or "replace #[index] failed"
     """.trimIndent()
@@ -73,6 +81,10 @@ class EditBlocksTool : AbstractMcpTool<EditBlocksToolArgs>() {
         // Get project directory
         val projectDir = project.guessProjectDir()?.toNioPathOrNull()
             ?: return Response(error = "Project directory not found")
+        
+        // Results map with same structure as input
+        // Create log collector
+        val logCollector = LogCollector()
         
         // Results map with same structure as input
         val results = mutableMapOf<String, List<String>>()
@@ -85,7 +97,7 @@ class EditBlocksTool : AbstractMcpTool<EditBlocksToolArgs>() {
         
         // Use kotlinx.serialization to convert to JSON string
         val result = EditBlocksResult(results)
-        val json = Json { prettyPrint = true }
+        val json = Json { prettyPrint = true; encodeDefaults = false }
         val jsonString = json.encodeToString(result)
         
         return Response(jsonString)
@@ -128,14 +140,20 @@ class EditBlocksTool : AbstractMcpTool<EditBlocksToolArgs>() {
                     continue
                 }
                 
-                if (count > 1) {
-                    results.add("replace #$index failed: Search text appears $count times - must be unique")
+                if (count > 1 && !edit.replaceAll) {
+                    results.add("replace #$index failed: Search text appears $count times - must be unique, use replaceAll: true if you want to replace all occurences")
                     continue
                 }
                 
                 // Apply the edit
                 currentContent = currentContent.replace(edit.search, edit.replace)
-                results.add("replace #$index successful")
+                
+                // Add appropriate success message based on whether multiple replacements were made
+                if (count > 1 && edit.replaceAll) {
+                    results.add("replace #$index successful: replaced $count occurrences")
+                } else {
+                    results.add("replace #$index successful")
+                }
             } catch (e: Exception) {
                 results.add("replace #$index failed: ${e.message}")
             }
