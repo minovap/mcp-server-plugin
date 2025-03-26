@@ -57,8 +57,7 @@
             instance="org.jetbrains.mcpserverplugin.settings.MCPConfigurable"
             displayName="MCP Server"/>
             
-        <!-- LLM Todo service -->
-        <projectService serviceImplementation="org.jetbrains.mcpserverplugin.llmtodo.LLMTodoService"/>
+        <!-- LLM Todo service removed -->
     </extensions>
     
     <actions>

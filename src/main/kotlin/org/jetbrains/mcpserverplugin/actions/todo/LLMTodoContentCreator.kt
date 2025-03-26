@@ -5,7 +5,7 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.guessProjectDir
 import com.intellij.openapi.ui.Messages
-import org.jetbrains.mcpserverplugin.llmtodo.LLMTodoService
+// LLMTodoService import removed
 import org.jetbrains.mcpserverplugin.settings.PluginSettings
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
@@ -255,20 +255,63 @@ object LLMTodoContentCreator {
     
     /**
      * Creates a scratch file with the given content and opens it in the editor
+     * Note: This functionality has been modified since LLMTodoService was removed
      */
     fun createScratchFile(project: Project, content: String) {
         try {
-            // Use the LLMTodoService to create a scratch file
+            // Create a scratch file directly using IntelliJ's API
             val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
             val fileName = "LLM_Scratchfile_$timestamp.md"
             
-            val fileService = LLMTodoService.getInstance(project)
-            val file = fileService.createScratchFile(fileName, content)
+            val isHtml = content.trim().startsWith("<") && content.contains("</")
+            
+            // Create a scratch file using IntelliJ's ScratchFileService
+            val file = com.intellij.openapi.application.ApplicationManager.getApplication().runWriteAction<com.intellij.openapi.vfs.VirtualFile> {
+                try {
+                    // Find the appropriate language based on content
+                    val language = if (isHtml) {
+                        com.intellij.lang.Language.findLanguageByID("HTML") ?: com.intellij.lang.Language.findLanguageByID("Markdown")
+                    } else {
+                        com.intellij.lang.Language.findLanguageByID("Markdown")
+                    }
+                    
+                    // Create the scratch file with the appropriate extension
+                    val finalFileName = if (isHtml && language?.id == "HTML") {
+                        fileName.replace(".md", ".html")
+                    } else {
+                        fileName
+                    }
+                    
+                    com.intellij.ide.scratch.ScratchRootType.getInstance().createScratchFile(
+                        project,
+                        finalFileName,
+                        language,
+                        content
+                    )
+                } catch (e: Exception) {
+                    // If the scratch file creation fails, fall back to creating a temp file
+                    try {
+                        // Create a temp file
+                        val tempFile = com.intellij.openapi.util.io.FileUtil.createTempFile(
+                            "llm_task_",
+                            "." + fileName.substringAfterLast('.', "md"),
+                            true
+                        )
+                        
+                        // Write content to the file
+                        com.intellij.openapi.util.io.FileUtil.writeToFile(tempFile, content)
+                        
+                        // Refresh the VFS to make the file visible
+                        com.intellij.openapi.vfs.LocalFileSystem.getInstance().refreshAndFindFileByIoFile(tempFile)
+                    } catch (ex: Exception) {
+                        null
+                    }
+                }
+            }
             
             if (file != null) {
                 // Open the file in the editor
                 FileEditorManager.getInstance(project).openFile(file, true)
-                // Removed the confirmation dialog
             } else {
                 Messages.showWarningDialog(
                     project,
