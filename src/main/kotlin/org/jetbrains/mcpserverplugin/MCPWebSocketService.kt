@@ -14,6 +14,8 @@ import org.jetbrains.mcpserverplugin.actions.todo.LLMTodoContentCreator
 import java.lang.reflect.InvocationTargetException
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 
 /**
@@ -292,9 +294,20 @@ class MCPWebSocketService : RestService() {
         
         // Only focus Claude app if explicitly requested
         if (focusClaudeApp) {
-            // Execute AppleScript to focus Claude app
+            // Execute AppleScript to focus Claude app asynchronously
             val command = "osascript -e 'tell application \"System Events\" to set isRunning to (count of (every process whose name is \"Claude\")) > 0' -e 'if isRunning then' -e 'tell application \"Claude\" to activate' -e 'else' -e 'tell application \"Claude\" to launch' -e 'delay 1' -e 'tell application \"Claude\" to activate' -e 'end if' -e 'tell application \"System Events\" to tell process \"Claude\" to set frontmost to true'"
-            Runtime.getRuntime().exec(arrayOf("/bin/bash", "-c", command))
+            CompletableFuture.runAsync {
+                try {
+                    val process = Runtime.getRuntime().exec(arrayOf("/bin/bash", "-c", command))
+                    process.waitFor(5, TimeUnit.SECONDS) // Short timeout to avoid hanging
+                    if (process.isAlive()) {
+                        LOG.warn("AppleScript focus command timed out, destroying process")
+                        process.destroyForcibly()
+                    }
+                } catch (e: Exception) {
+                    LOG.error("Error executing AppleScript to focus Claude app", e)
+                }
+            }
         }
         
         // Log the active connections for debugging

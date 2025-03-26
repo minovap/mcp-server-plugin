@@ -16,11 +16,14 @@ import java.awt.datatransfer.DataFlavor
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.Executors
+import com.intellij.openapi.application.ModalityState
 
 class ConnectAction : AnAction(), DumbAware, ClipboardOwner {
     private val logger = Logger.getInstance(ConnectAction::class.java)
     private val clipboardLatch = CountDownLatch(1)
     private val hasTransferCompleted = AtomicBoolean(false)
+    private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "AppleScript-Executor") }
 
     override fun actionPerformed(e: AnActionEvent) {
         val connectionManager = MCPConnectionManager.getInstance()
@@ -123,6 +126,7 @@ delay 1.5
 
 tell application "System Events"
 	keystroke "v" using {command down} -- Paste from clipboard
+	delay 0.5
 	key code 36 -- Press Return
 end tell
 
@@ -164,43 +168,52 @@ log "Script completed"
                 "-e '${it.replace("'", "\\'")}'"
             }.let { "osascript \\\n$it" }
 
-            // Execute the command and wait for it to complete
-            val process = Runtime.getRuntime().exec(arrayOf("/bin/bash", "-c", command))
-
-            // Wait for the process to complete instead of using timeouts
-            logger.info("Waiting for the AppleScript process to complete")
-            val processExitCode = process.waitFor()
-            logger.info("AppleScript process completed with exit code: $processExitCode")
-            
-            // Check if the process completed successfully
-            if (processExitCode != 0) {
-                // Read error stream to log any issues
-                val errorReader = process.errorStream.bufferedReader()
-                val errorOutput = errorReader.readText()
-                logger.warn("AppleScript execution failed with exit code $processExitCode: $errorOutput")
-            }
-
-            // Restore original clipboard content
-            ApplicationManager.getApplication().invokeAndWait {
+            // Execute the command asynchronously without blocking the IDE
+            executor.submit {
                 try {
-                    val restoreClipboardSelection = StringSelection(savedClipboard)
-                    clipboard.setContents(restoreClipboardSelection, null)
-                    logger.info("Restored original clipboard content")
-                } catch (e: Exception) {
-                    logger.error("Failed to restore clipboard content", e)
+                    logger.info("Starting AppleScript execution asynchronously")
+                    val process = Runtime.getRuntime().exec(arrayOf("/bin/bash", "-c", command))
+                    
+                    // Wait for process with timeout to prevent hanging
+                    val completed = process.waitFor(30, TimeUnit.SECONDS)
+                    
+                    if (!completed) {
+                        logger.warn("AppleScript execution timed out after 30 seconds")
+                        process.destroyForcibly()
+                    } else {
+                        val exitCode = process.exitValue()
+                        logger.info("AppleScript process completed with exit code: $exitCode")
+                        
+                        if (exitCode != 0) {
+                            // Read error stream to log any issues
+                            val errorReader = process.errorStream.bufferedReader()
+                            val errorOutput = errorReader.readText()
+                            logger.warn("AppleScript execution failed with exit code $exitCode: $errorOutput")
+                        } else {
+                            // Update connection state on EDT thread when completed successfully
+                            ApplicationManager.getApplication().invokeLater({
+                                connectionManager.setConnectionState(true)
+                            }, ModalityState.any())
+                        }
+                    }
+                } catch (ex: Exception) {
+                    logger.error("Error executing AppleScript", ex)
                 }
-            }
-
-            // Wait for the process to complete to avoid leaving zombie processes
-            try {
-                process.waitFor(10, TimeUnit.SECONDS)
                 
-                // Set connection state to connected after successful completion
-                connectionManager.setConnectionState(true)
-                
-            } catch (e: Exception) {
-                logger.warn("AppleScript execution process did not complete normally", e)
+                // Restore clipboard content on EDT thread whether successful or not
+                ApplicationManager.getApplication().invokeLater({
+                    try {
+                        val restoreClipboardSelection = StringSelection(savedClipboard)
+                        clipboard.setContents(restoreClipboardSelection, null)
+                        logger.info("Restored original clipboard content")
+                    } catch (e: Exception) {
+                        logger.error("Failed to restore clipboard content", e)
+                    }
+                }, ModalityState.any())
             }
+            
+            // Set connection state to pending immediately to give user feedback
+            connectionManager.setConnectionState(true)
 
         } catch (ex: Exception) {
             logger.error("Error in ConnectAction", ex)
