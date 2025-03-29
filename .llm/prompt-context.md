@@ -8,9 +8,9 @@ If you want to check if your changes are working you need me to install the newl
 
 You dont need to write a summary at the end, if it builds and looks good you can just end the message.
 
-# Task
-
 Please analyze the code context referenced below and complete this task:
+
+# Task
 
 {{TASK}}
 
