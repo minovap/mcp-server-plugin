@@ -6,6 +6,7 @@ import com.intellij.openapi.vfs.toNioPathOrNull
 import kotlinx.serialization.Serializable
 import org.jetbrains.ide.mcp.Response
 import org.jetbrains.mcpserverplugin.AbstractMcpTool
+import org.jetbrains.mcpserverplugin.utils.FileLocks
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.nio.file.StandardOpenOption
@@ -55,15 +56,19 @@ class ClaudeCodeReplaceTool : AbstractMcpTool<ReplaceToolArgs>() {
             // Create parent directories if they don't exist
             Files.createDirectories(filePath.parent)
 
-            // Write file content
-            Files.writeString(
-                filePath,
-                args.content,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING
-            )
-
-            return Response("Successfully wrote to file: $filePath")
+            // Acquire lock for the entire file operation
+            return FileLocks.withFileLock(filePath) {
+                // The lock ensures consistency if the file is being simultaneously edited by EditBlocksTool
+                
+                Files.writeString(
+                    filePath,
+                    args.content,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING
+                )
+                
+                Response("Successfully wrote to file: $filePath")
+            }
         } catch (e: Exception) {
             return Response(error = "Error writing file: ${e.message}")
         }

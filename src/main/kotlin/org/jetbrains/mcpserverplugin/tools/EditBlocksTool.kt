@@ -8,6 +8,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jetbrains.ide.mcp.Response
 import org.jetbrains.mcpserverplugin.AbstractMcpTool
+import org.jetbrains.mcpserverplugin.utils.FileLocks
 import org.jetbrains.mcpserverplugin.utils.LogCollector
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -121,60 +122,62 @@ class EditBlocksTool : AbstractMcpTool<EditBlocksToolArgs>() {
             return edits.mapIndexed { index, _ -> "replace #$index failed: File does not exist" }
         }
         
-        // Process each edit in sequence
-        val results = mutableListOf<String>()
-        var currentContent = try {
-            Files.readString(resolvedPath)
-        } catch (e: Exception) {
-            return edits.mapIndexed { index, _ -> "replace #$index failed: Error reading file - ${e.message}" }
-        }
-        
-        // Apply each edit in sequence
-        for ((index, edit) in edits.withIndex()) {
-            try {
-                // Count occurrences of search string
-                val count = currentContent.split(edit.search).size - 1
-                
-                if (count == 0) {
-                    results.add("replace #$index failed: Search text not found")
-                    continue
-                }
-                
-                if (count > 1 && !edit.replaceAll) {
-                    results.add("replace #$index failed: Search text appears $count times - must be unique, use replaceAll: true if you want to replace all occurences")
-                    continue
-                }
-                
-                // Apply the edit
-                currentContent = currentContent.replace(edit.search, edit.replace)
-                
-                // Add appropriate success message based on whether multiple replacements were made
-                if (count > 1 && edit.replaceAll) {
-                    results.add("replace #$index successful: replaced $count occurrences")
-                } else {
-                    results.add("replace #$index successful")
-                }
+        // Process each edit in sequence using the shared file lock
+        return FileLocks.withFileLock(resolvedPath) {
+            val results = mutableListOf<String>()
+            var currentContent = try {
+                Files.readString(resolvedPath)
             } catch (e: Exception) {
-                results.add("replace #$index failed: ${e.message}")
+                return@withFileLock edits.mapIndexed { index, _ -> "replace #$index failed: Error reading file - ${e.message}" }
             }
-        }
-        
-        // Write the final content back to the file
-        try {
-            Files.writeString(
-                resolvedPath,
-                currentContent,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING
-            )
-        } catch (e: Exception) {
-            // If writing fails, mark remaining edits as failed
-            val lastSuccessIndex = results.indexOfLast { it.contains("successful") }
-            for (i in (lastSuccessIndex + 1) until edits.size) {
-                results[i] = "replace #$i failed: Error writing to file - ${e.message}"
+            
+            // Apply each edit in sequence
+            for ((index, edit) in edits.withIndex()) {
+                try {
+                    // Count occurrences of search string
+                    val count = currentContent.split(edit.search).size - 1
+                    
+                    if (count == 0) {
+                        results.add("replace #$index failed: Search text not found")
+                        continue
+                    }
+                    
+                    if (count > 1 && !edit.replaceAll) {
+                        results.add("replace #$index failed: Search text appears $count times - must be unique, use replaceAll: true if you want to replace all occurences")
+                        continue
+                    }
+                    
+                    // Apply the edit
+                    currentContent = currentContent.replace(edit.search, edit.replace)
+                    
+                    // Add appropriate success message based on whether multiple replacements were made
+                    if (count > 1 && edit.replaceAll) {
+                        results.add("replace #$index successful: replaced $count occurrences")
+                    } else {
+                        results.add("replace #$index successful")
+                    }
+                } catch (e: Exception) {
+                    results.add("replace #$index failed: ${e.message}")
+                }
             }
+            
+            // Write the final content back to the file (still within the same lock)
+            try {
+                Files.writeString(
+                    resolvedPath,
+                    currentContent,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING
+                )
+            } catch (e: Exception) {
+                // If writing fails, mark remaining edits as failed
+                val lastSuccessIndex = results.indexOfLast { it.contains("successful") }
+                for (i in (lastSuccessIndex + 1) until edits.size) {
+                    results[i] = "replace #$i failed: Error writing to file - ${e.message}"
+                }
+            }
+            
+            results
         }
-        
-        return results
     }
 }
