@@ -17,4 +17,10 @@ object ClaudeIcons {
     
     @JvmField
     val AI_STYLE_ICON = IconLoader.getIcon("/icons/actions/ai-style-icon.svg", ClaudeIcons::class.java)
+    
+    @JvmField
+    val PROJECT_LOCK_ICON = IconLoader.getIcon("/icons/actions/project-lock.svg", ClaudeIcons::class.java)
+    
+    @JvmField
+    val PROJECT_UNLOCK_ICON = IconLoader.getIcon("/icons/actions/project-unlock.svg", ClaudeIcons::class.java)
 }

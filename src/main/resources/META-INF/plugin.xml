@@ -47,6 +47,7 @@
         <applicationService serviceImplementation="org.jetbrains.mcpserverplugin.settings.PluginSettings"/>
         <applicationService serviceImplementation="org.jetbrains.mcpserverplugin.actions.ui.LLMTodoDialogSettings"/>
         <applicationService serviceImplementation="org.jetbrains.mcpserverplugin.MCPConnectionManager" preload="true"/>
+        <applicationService serviceImplementation="org.jetbrains.mcpserverplugin.ProjectLockManager"/>
 
         <!-- Tool windows -->
         <toolWindow id="MCP Tools" anchor="right" factoryClass="org.jetbrains.mcpserverplugin.toolwindow.McpToolWindowFactory" icon="AllIcons.Actions.Execute"/>
@@ -113,6 +114,12 @@
                     description="Install the latest built plugin and restart the IDE"
                     icon="AllIcons.Actions.Install"/>
                     
+            <action id="org.jetbrains.mcpserverplugin.actions.ProjectLockToggle"
+                    class="org.jetbrains.mcpserverplugin.actions.ProjectLockToggleAction"
+                    text="Lock Project for MCP"
+                    description="Lock MCP operations to the current project">
+            </action>
+                    
 
         </group>
         
@@ -136,6 +143,14 @@
                description="Connect to Claude">
             <!-- Add to project view context menu -->
             <add-to-group group-id="ProjectViewPopupMenu" anchor="first" />
+        </action>
+        
+        <!-- Add the project lock toggle to the main toolbar -->
+        <action id="org.jetbrains.mcpserverplugin.actions.ProjectLockToggle.Toolbar"
+                class="org.jetbrains.mcpserverplugin.actions.ProjectLockToggleAction"
+                text="Lock Project for MCP"
+                description="Lock MCP operations to the current project">
+            <add-to-group group-id="MainToolBar" anchor="last" />
         </action>
     </actions>
 </idea-plugin>

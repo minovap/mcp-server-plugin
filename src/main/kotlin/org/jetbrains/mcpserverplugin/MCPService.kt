@@ -18,6 +18,7 @@ import io.netty.channel.ChannelHandlerContext
 import io.netty.handler.codec.http.FullHttpRequest
 import io.netty.handler.codec.http.HttpMethod
 import io.netty.handler.codec.http.QueryStringDecoder
+import org.jetbrains.mcpserverplugin.ProjectLockManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -70,7 +71,7 @@ class MCPService : RestService() {
 
     override fun execute(urlDecoder: QueryStringDecoder, request: FullHttpRequest, context: ChannelHandlerContext): String? {
         val path = urlDecoder.path().split(serviceName).last().trimStart('/')
-        val project = getLastFocusedOrOpenedProject() ?: return null
+        val project = ProjectLockManager.getInstance().getProjectForMCP() ?: return null
         
         // Use only enabled tools
         val tools = McpToolManager.getEnabledTools() 
