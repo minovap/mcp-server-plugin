@@ -42,7 +42,7 @@ class WebSocketManager {
         this.indicator.style.cssText = `
             position: absolute;
             top: 18px;
-            left: 100px;
+            left: 140px;
             background-color: #cc0000;
             color: white;
             font-size: 12px;
@@ -629,7 +629,7 @@ class WebSocketManager {
                                 this.timers['new-chat-send'] = setTimeout(() => {
                                     if (!this.running) return; // Skip if stopped
 
-                                    const sendButton = document.querySelector('button[aria-label="Send Message"]');
+                                    const sendButton = document.querySelector('button[aria-label="Send message"]');
                                     if (sendButton) {
                                         sendButton.click();
                                     }
